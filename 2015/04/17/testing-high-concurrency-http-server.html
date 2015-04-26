@@ -46,8 +46,11 @@
           
           <p>Probably we hit system limitation on max open files per process.</p>
           
-          <p>After hours I fine this manual most useful
-          http:&#47;&#47;b.oldhu.com&#47;2012&#47;07&#47;19&#47;increase-tcp-max-connections-on-mac-os-x&#47;</p>
+          <p></p>
+          
+          <p>After hours I fine this manual most useful</p>
+          
+          <p><a href="http://b.oldhu.com/2012/07/19/increase-tcp-max-connections-on-mac-os-x/">http:&#47;&#47;b.oldhu.com&#47;2012&#47;07&#47;19&#47;increase-tcp-max-connections-on-mac-os-x&#47;</a></p>
           
           <p>I also increase <code>worker_processes</code> and <code>worker_connections</code>in nginx:</p>
           <pre class="highlight nginx"><code><span class="k">worker_processes</span>  <span class="mi">2</span><span class="p">;</span>&#x000A;<span class="k">events</span> <span class="p">{</span>&#x000A;  <span class="kn">worker_connections</span>  <span class="mi">4096</span><span class="p">;</span>&#x000A;<span class="p">}</span>&#x000A;<span class="k">worker_rlimit_nofile</span>    <span class="mi">8000</span><span class="p">;</span>&#x000A;</code></pre>
@@ -66,10 +69,11 @@
           <li><strong>siege</strong> - was better but still could not make many requests</li>
           </ul>
           
-          <p>What make me happy is a utility called <strong>boom</strong></p>
+          <p>What make me happy is a utility called <a href="https://github.com/rakyll/boom"><strong>boom</strong></a></p>
           
-          <p>Written in GO and source on github: 
-          https:&#47;&#47;github.com&#47;rakyll&#47;boom</p>
+          <p>Written in GO and source on github:</p>
+          
+          <p><a href="https://github.com/rakyll/boom">https:&#47;&#47;github.com&#47;rakyll&#47;boom</a></p>
           
           <p>There is no binary for mac, so need to compile:</p>
           <pre class="highlight shell"><code>brew install go&#x000A;<span class="nb">export </span><span class="nv">GOPATH</span><span class="o">=</span>~/go&#x000A;go get github.com/rakyll/boom&#x000A;</code></pre>
@@ -77,12 +81,15 @@
           <p>Using boom:</p>
           <pre class="highlight plaintext"><code>~/go/bin/boom -n 8000 -c 1500 -disable-keepalive http://127.0.0.1:7080&#x000A;</code></pre>
           
-          <p>It has:
-          * nice progress bar
-          * can handle many requests (eg 30k reqs with 1500 conns) 
-          * can handle as much concurrency as I need
-          * keep going on error
-          * has nice diagram</p>
+          <p>It has:</p>
+          
+          <ul>
+          <li>nice progress bar</li>
+          <li>can handle many requests (eg 30k reqs with 1500 conns) </li>
+          <li>can handle as much concurrency as I need</li>
+          <li>keep going on error</li>
+          <li>has nice diagram</li>
+          </ul>
           
           <p>Progress bar:</p>
           <pre class="highlight plaintext"><code>~/go/bin/boom -n 9000 -c 1500 -disable-keepalive http://127.0.0.1:7080&#x000A;4500 / 9000 Boooooooooooooooooooooom                                 ! 50.00 % 9s&#x000A;</code></pre>

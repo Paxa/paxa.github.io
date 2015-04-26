@@ -14,7 +14,7 @@
     <link rel="alternate" href="http://blog.url.com/2015/04/17/testing-high-concurrency-http-server.html"/>
     <id>http://blog.url.com/2015/04/17/testing-high-concurrency-http-server.html</id>
     <published>2015-04-17T00:00:00+07:00</published>
-    <updated>2015-04-26T13:41:00+07:00</updated>
+    <updated>2015-04-26T17:33:46+07:00</updated>
     <author>
       <name>Article Author</name>
     </author>
@@ -51,8 +51,11 @@ ab -n 500 -c 500 http://127.0.0.1:7080/
 
 &lt;p&gt;Probably we hit system limitation on max open files per process.&lt;/p&gt;
 
-&lt;p&gt;After hours I fine this manual most useful
-http:&amp;#47;&amp;#47;b.oldhu.com&amp;#47;2012&amp;#47;07&amp;#47;19&amp;#47;increase-tcp-max-connections-on-mac-os-x&amp;#47;&lt;/p&gt;
+&lt;p&gt;&lt;/p&gt;
+
+&lt;p&gt;After hours I fine this manual most useful&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="http://b.oldhu.com/2012/07/19/increase-tcp-max-connections-on-mac-os-x/"&gt;http:&amp;#47;&amp;#47;b.oldhu.com&amp;#47;2012&amp;#47;07&amp;#47;19&amp;#47;increase-tcp-max-connections-on-mac-os-x&amp;#47;&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;I also increase &lt;code&gt;worker_processes&lt;/code&gt; and &lt;code&gt;worker_connections&lt;/code&gt;in nginx:&lt;/p&gt;
 &lt;pre class="highlight nginx"&gt;&lt;code&gt;&lt;span class="k"&gt;worker_processes&lt;/span&gt;  &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
@@ -89,10 +92,11 @@ ab -n 9000 -c 1000 http://127.0.0.1:7080/
 &lt;li&gt;&lt;strong&gt;siege&lt;/strong&gt; - was better but still could not make many requests&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;What make me happy is a utility called &lt;strong&gt;boom&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;What make me happy is a utility called &lt;a href="https://github.com/rakyll/boom"&gt;&lt;strong&gt;boom&lt;/strong&gt;&lt;/a&gt;&lt;/p&gt;
 
-&lt;p&gt;Written in GO and source on github: 
-https:&amp;#47;&amp;#47;github.com&amp;#47;rakyll&amp;#47;boom&lt;/p&gt;
+&lt;p&gt;Written in GO and source on github:&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://github.com/rakyll/boom"&gt;https:&amp;#47;&amp;#47;github.com&amp;#47;rakyll&amp;#47;boom&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;There is no binary for mac, so need to compile:&lt;/p&gt;
 &lt;pre class="highlight shell"&gt;&lt;code&gt;brew install go
@@ -104,12 +108,15 @@ go get github.com/rakyll/boom
 &lt;pre class="highlight plaintext"&gt;&lt;code&gt;~/go/bin/boom -n 8000 -c 1500 -disable-keepalive http://127.0.0.1:7080
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;It has:
-* nice progress bar
-* can handle many requests (eg 30k reqs with 1500 conns) 
-* can handle as much concurrency as I need
-* keep going on error
-* has nice diagram&lt;/p&gt;
+&lt;p&gt;It has:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;nice progress bar&lt;/li&gt;
+&lt;li&gt;can handle many requests (eg 30k reqs with 1500 conns) &lt;/li&gt;
+&lt;li&gt;can handle as much concurrency as I need&lt;/li&gt;
+&lt;li&gt;keep going on error&lt;/li&gt;
+&lt;li&gt;has nice diagram&lt;/li&gt;
+&lt;/ul&gt;
 
 &lt;p&gt;Progress bar:&lt;/p&gt;
 &lt;pre class="highlight plaintext"&gt;&lt;code&gt;~/go/bin/boom -n 9000 -c 1500 -disable-keepalive http://127.0.0.1:7080
@@ -203,7 +210,7 @@ Response time histogram:
     <link rel="alternate" href="http://blog.url.com/2015/03/02/synchronous-javascript-with-fibers.html"/>
     <id>http://blog.url.com/2015/03/02/synchronous-javascript-with-fibers.html</id>
     <published>2015-03-02T00:00:00+07:00</published>
-    <updated>2015-04-26T13:23:28+07:00</updated>
+    <updated>2015-04-26T17:40:23+07:00</updated>
     <author>
       <name>Article Author</name>
     </author>
@@ -260,6 +267,8 @@ Response time histogram:
 
 &lt;span class="nx"&gt;module&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;exports&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;/p&gt;
 
 &lt;p&gt;Fibers provide just one simple thing: stop execution and waiting for resume. For every function with callback we can call it, put fiber on pause then when we get callback - unpause and continue execution. Code become not blocking but asynchronous.&lt;/p&gt;
 
@@ -326,7 +335,7 @@ Response time histogram:
     <link rel="alternate" href="http://blog.url.com/2015/01/29/convert-mysql-database-to-postgresql.html"/>
     <id>http://blog.url.com/2015/01/29/convert-mysql-database-to-postgresql.html</id>
     <published>2015-01-29T00:00:00+07:00</published>
-    <updated>2015-04-26T13:41:22+07:00</updated>
+    <updated>2015-04-26T17:27:19+07:00</updated>
     <author>
       <name>Article Author</name>
     </author>
@@ -419,7 +428,7 @@ pgloader mysql://user:pass@localhost/db_name postgres:///db_name
     <link rel="alternate" href="http://blog.url.com/2015/01/14/handle-exceptions-in-d.html"/>
     <id>http://blog.url.com/2015/01/14/handle-exceptions-in-d.html</id>
     <published>2015-01-14T00:00:00+07:00</published>
-    <updated>2015-04-26T13:17:12+07:00</updated>
+    <updated>2015-04-26T17:40:41+07:00</updated>
     <author>
       <name>Article Author</name>
     </author>
@@ -434,6 +443,8 @@ pgloader mysql://user:pass@localhost/db_name postgres:///db_name
 &lt;/code&gt;&lt;/pre&gt;
 
 &lt;p&gt;&lt;code&gt;catch (Exception error)&lt;/code&gt; will catch all exception of type &lt;code&gt;Exception&lt;/code&gt; and child (inhereted) types.&lt;/p&gt;
+
+&lt;p&gt;&lt;/p&gt;
 
 &lt;h3&gt;Error types structure&lt;/h3&gt;
 
@@ -502,7 +513,7 @@ try {
     <link rel="alternate" href="http://blog.url.com/2015/01/13/anonymous-functions-in-d.html"/>
     <id>http://blog.url.com/2015/01/13/anonymous-functions-in-d.html</id>
     <published>2015-01-13T00:00:00+07:00</published>
-    <updated>2015-04-26T13:19:30+07:00</updated>
+    <updated>2015-04-26T17:41:02+07:00</updated>
     <author>
       <name>Article Author</name>
     </author>
@@ -537,6 +548,8 @@ void main() {
 8
 10
 &lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;/p&gt;
 
 &lt;p&gt;Alternative syntax, ruby&amp;#39;s blocks style:&lt;/p&gt;
 &lt;pre class="highlight plaintext"&gt;&lt;code&gt;import std.stdio, std.string, std.file, std.path;

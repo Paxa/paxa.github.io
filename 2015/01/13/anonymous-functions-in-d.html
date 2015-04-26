@@ -38,6 +38,8 @@
           <p>Output:</p>
           <pre class="highlight plaintext"><code>% rdmd delegate.d&#x000A;2&#x000A;4&#x000A;6&#x000A;8&#x000A;10&#x000A;</code></pre>
           
+          <p></p>
+          
           <p>Alternative syntax, ruby&#39;s blocks style:</p>
           <pre class="highlight plaintext"><code>import std.stdio, std.string, std.file, std.path;&#x000A;&#x000A;void withingDir(string dir, void delegate() callback) {&#x000A;    auto cwd = absolutePath(".").chomp(".");&#x000A;    writeln("Current directory is: ", cwd);&#x000A;    chdir(dir);&#x000A;    callback();&#x000A;    chdir(cwd);&#x000A;}&#x000A;&#x000A;void main() {&#x000A;    withingDir("/var", {&#x000A;        writefln("I'm in %s", absolutePath(".").chomp("."));&#x000A;    });&#x000A;}&#x000A;</code></pre>
           

@@ -30,10 +30,6 @@
             <br>
             <span class='date'>Jul  6, 2014</span>
           </h2>
-          <!--
-            use article.summary(250) if you have Nokogiri available to show just
-            the first 250 characters
-          -->
           <p>Short tutorial about setting up drone to test rails 4 app running on ruby 2.1.</p>
           
           <p>For us who working in payment industry, it&#39;s important to keep all source code inside company, because of <a href="http://en.wikipedia.org/wiki/Payment_Card_Industry_Data_Security_Standard">PCI-DSS</a> requirements (I almost sure about that).</p>
@@ -57,7 +53,7 @@
           
           <p>Drone use own images for docker to build, most of them are at docker repository, but new versions may be not there.</p>
           
-          <p>I cloned https:&#47;&#47;github.com&#47;drone&#47;images to server, and run:</p>
+          <p>I cloned <a href="https://github.com/drone/images">https:&#47;&#47;github.com&#47;drone&#47;images</a> to server, and run:</p>
           <pre class="highlight plaintext"><code>docker build -rm -t bradrydzewski/ruby:2.1.1  builder/ruby/ruby_2.1.1/&#x000A;</code></pre>
           
           <p>This will build image and add it to docker&#39;s local catalogue.</p>
