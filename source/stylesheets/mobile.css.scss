@@ -1,0 +1,20 @@
+body > header {
+  padding-left: 1em;
+  padding-right: 1em;
+}
+.page-wrapper {
+  padding-left: 1em;
+  padding-right: 1em;
+  > #main {
+    float: left;
+    width: 100%;
+    padding-right: 0;
+  }
+  > aside  {
+    width: 100%;
+    float: right;
+    border-left: none;
+    padding-left: 0;
+    text-align: center;
+  }
+}

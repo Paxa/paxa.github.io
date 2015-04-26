@@ -1,3 +1,5 @@
+require "./code_style"
+
 ###
 # Blog settings
 ###
@@ -18,13 +20,13 @@ activate :blog do |blog|
   # blog.year_link = "{year}.html"
   # blog.month_link = "{year}/{month}.html"
   # blog.day_link = "{year}/{month}/{day}.html"
-  # blog.default_extension = ".markdown"
+  blog.default_extension = ".md"
 
   blog.tag_template = "tag.html"
   blog.calendar_template = "calendar.html"
 
   # Enable pagination
-  # blog.paginate = true
+  blog.paginate = true
   # blog.per_page = 10
   # blog.page_link = "page/{num}"
 end
@@ -32,8 +34,15 @@ end
 page "/feed.xml", layout: false
 
 activate :syntax
-activate :livereload
+
+set :markdown_engine, :redcarpet
+set :markdown, fenced_code_blocks: true, smartypants: true, tables: true
+
 activate :search_engine_sitemap
+
+activate :disqus do |disqus|
+  disqus.shortname = 'pe-notes'
+end
 
 ###
 # Page options, layouts, aliases and proxies
@@ -87,6 +96,10 @@ activate :deploy do |deploy|
   deploy.branch = "master"
   # strategy is optional (default is :force_push)
   # deploy.strategy = :submodule
+end
+
+configure :development do
+  activate :livereload, no_swf: true
 end
 
 # Build-specific configuration

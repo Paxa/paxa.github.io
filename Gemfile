@@ -9,6 +9,14 @@ gem "middleman-livereload"
 gem 'middleman-search_engine_sitemap'
 gem 'middleman-robots'
 gem 'middleman-deploy', '~> 1.0'
+gem "middleman-disqus"
 
 # For feed.xml.builder
 gem "builder", "~> 3.0"
+
+gem 'bitters'
+gem 'bourbon'
+gem 'neat'
+
+gem 'redcarpet'
+#gem 'kaminari'
