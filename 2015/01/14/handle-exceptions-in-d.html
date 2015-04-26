@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta content='IE=edge;chrome=1' http-equiv='X-UA-Compatible'>
+    <meta content='width=device-width, initial-scale=1, user-scalable=yes' name='viewport'>
+    <meta content='#9CE8AC' name='theme-color'>
+    <title>
+      PE-Notes  - Handle exceptions in D
+    </title>
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="/feed.xml" />
+    <link href="/stylesheets/application-24cc418f.css" rel="stylesheet" type="text/css" />
+    <link href="/stylesheets/mobile-b135630e.css" rel="stylesheet" type="text/css" media="only screen and (max-device-width : 640px), screen and (max-width : 640px)" />
+  </head>
+  <body>
+    <header>
+      <div class='inner'><a href='/'><h2>Pavel's Notes</h2>
+        <br>
+        <h4>About programming in Ruby, Javascript, D</h4></a></div>
+    </header>
+    <div class='page-wrapper'>
+      <div id='main' role='main'>
+        <article class='blog-post'>
+          <h2 class='title'>
+            Handle exceptions in D
+            <br>
+            <span class='date'>Jan 14, 2015</span>
+          </h2>
+          <p>Here&#39;s how to handle exceptions in D.</p>
+          <pre class="highlight plaintext"><code>try {&#x000A;    throw new Exception("error message");&#x000A;} catch (Exception error) {&#x000A;    writefln("Error catched: %s", error.msg);&#x000A;} finally {&#x000A;    writefln("in finaly block");&#x000A;}&#x000A;</code></pre>
+          
+          <p><code>catch (Exception error)</code> will catch all exception of type <code>Exception</code> and child (inhereted) types.</p>
+          
+          <h3>Error types structure</h3>
+          
+          <p>Here is a list of standart error types in D (not complete)</p>
+          <pre class="highlight plaintext"><code>Throwable&#x000A;  - Error&#x000A;    - AssertError&#x000A;    - FinalizeError&#x000A;    - HiddenFuncError&#x000A;    - InvalidMemoryOperationError&#x000A;    - OutOfMemoryError&#x000A;    - RangeError&#x000A;    - SwitchError&#x000A;  - Exception&#x000A;    - ErrnoException&#x000A;    - UnicodeException&#x000A;    - FileException (std.file)&#x000A;    - ProcessException (std.process)&#x000A;    - RegexException (std.regex)&#x000A;    - DateTimeException (std.datetime)&#x000A;    - TimeException (core.time)&#x000A;    - StdioException (std.stdio)&#x000A;    - StringException (std.string)&#x000A;    - AddressException, HostException, SocketException, ... (std.socket)&#x000A;</code></pre>
+          
+          <h3>Custom errors</h3>
+          <pre class="highlight plaintext"><code>// Define custom exception class&#x000A;class ArgumentError : Exception {&#x000A;    this(string msg, string file = __FILE__, size_t line = __LINE__) {&#x000A;        super(msg, file, line);&#x000A;    }&#x000A;}&#x000A;&#x000A;// Throw custom class error&#x000A;throw new ArgumentError("first argument array should be not empty");&#x000A;&#x000A;// Catch custom error&#x000A;try {&#x000A;    someFunction([]);&#x000A;} catch (ArgumentError error) {&#x000A;    writeln("ERROR: ", error.msg);&#x000A;    return 1;&#x000A;}&#x000A;</code></pre>
+          
+          <p>We need to add <code>string file = __FILE__, size_t line = __LINE__</code> which will automatically add position where exception was thrown, without it stacktrace will show line number of <code>super(msg)</code>.</p>
+          
+          <h3>More</h3>
+          
+          <p><code>nothrow</code> functions can not throw any exceptions. It&#39;s made to indicate for developers who will use your function, also for better compiled code generation.</p>
+          <pre class="highlight plaintext"><code>ulong size() nothrow { return m_size; }&#x000A;&#x000A;</code></pre>
+          
+          <p>Read more:</p>
+          
+          <ul>
+          <li><a href="http://ddili.org/ders/d.en/exceptions.html">http:&#47;&#47;ddili.org&#47;ders&#47;d.en&#47;exceptions.html</a></li>
+          <li><a href="http://dlang.org/library/core/exception.html">http:&#47;&#47;dlang.org&#47;library&#47;core&#47;exception.html</a></li>
+          </ul>
+          <div id="disqus_thread"></div>
+          <script type="text/javascript">
+          //<![CDATA[
+                            var disqus_shortname = 'pe-notes';
+                    
+              (function() {
+                  var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+                  dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+                  (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+              })();
+          //]]>
+          </script>
+          <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+          <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+          
+        </article>
+      </div>
+      <aside>
+        <h2>Recent Articles</h2>
+        <ol>
+          <li>
+            <a href="/2015/04/17/testing-high-concurrency-http-server.html">Testing high concurrency http server</a>
+            <br>
+            <span class='date'>Apr 17, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/03/02/synchronous-javascript-with-fibers.html">Synchronous Javascript with fibers</a>
+            <br>
+            <span class='date'>Mar  2, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/29/convert-mysql-database-to-postgresql.html">Convert mysql database to postgresql</a>
+            <br>
+            <span class='date'>Jan 29, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/27/validating-hash-params-in-ruby.html">Validating hash params in ruby</a>
+            <br>
+            <span class='date'>Jan 27, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/14/handle-exceptions-in-d.html">Handle exceptions in D</a>
+            <br>
+            <span class='date'>Jan 14, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/13/anonymous-functions-in-d.html">Anonymous functions in D</a>
+            <br>
+            <span class='date'>Jan 13, 2015</span>
+          </li>
+          <li>
+            <a href="/2014/10/28/itunes-12-blue-icon.html">iTunes 12 blue icon</a>
+            <br>
+            <span class='date'>Oct 28, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/09/29/convert-ruby-time-to-server-timezone.html">Convert ruby time to server timezone</a>
+            <br>
+            <span class='date'>Sep 29, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/08/26/node-js-standart-libs-auto-require.html">Node.js standart libs auto-require</a>
+            <br>
+            <span class='date'>Aug 26, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/07/16/continuous-testing-for-d.html">Continuous testing for D</a>
+            <br>
+            <span class='date'>Jul 16, 2014</span>
+          </li>
+        </ol>
+      </aside>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,621 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Blog Name</title>
+  <subtitle>Blog subtitle</subtitle>
+  <id>http://blog.url.com/</id>
+  <link href="http://blog.url.com/"/>
+  <link href="http://blog.url.com/feed.xml" rel="self"/>
+  <updated>2015-04-17T00:00:00+07:00</updated>
+  <author>
+    <name>Blog Author</name>
+  </author>
+  <entry>
+    <title>Testing high concurrency http server</title>
+    <link rel="alternate" href="http://blog.url.com/2015/04/17/testing-high-concurrency-http-server.html"/>
+    <id>http://blog.url.com/2015/04/17/testing-high-concurrency-http-server.html</id>
+    <published>2015-04-17T00:00:00+07:00</published>
+    <updated>2015-04-26T13:41:00+07:00</updated>
+    <author>
+      <name>Article Author</name>
+    </author>
+    <content type="html">&lt;p&gt;I was making some research for one of upcoming project at my job. I needed to test http server if it can handle 500-1500 concurrent requests.&lt;/p&gt;
+
+&lt;p&gt;It&amp;#39;s was more hard to make right testing rather then right server. Web server don&amp;#39;t have any record in error log and could process requests that I sent with curl while load test is running.&lt;/p&gt;
+
+&lt;h3&gt;Setup&lt;/h3&gt;
+
+&lt;p&gt;First I setup Nginx with &lt;a href="http://wiki.nginx.org/HttpEchoModule"&gt;HttpEchoModule&lt;/a&gt;, I used &lt;a href="http://openresty.org/"&gt;openresty&lt;/a&gt; to easily configure and compile with extra modules.&lt;/p&gt;
+
+&lt;p&gt;Next I create config to wait 3 seconds and response with some text.&lt;/p&gt;
+
+&lt;p&gt;I choose nginx as example to compare with real application.&lt;/p&gt;
+&lt;pre class="highlight nginx"&gt;&lt;code&gt;&lt;span class="k"&gt;location&lt;/span&gt; &lt;span class="n"&gt;/&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="kn"&gt;add_header&lt;/span&gt; &lt;span class="s"&gt;Content-Disposition&lt;/span&gt; &lt;span class="s"&gt;"inline"&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+    &lt;span class="kn"&gt;add_header&lt;/span&gt; &lt;span class="s"&gt;Content-Type&lt;/span&gt; &lt;span class="s"&gt;"text/plain"&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+
+    &lt;span class="kn"&gt;echo_sleep&lt;/span&gt; &lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+    &lt;span class="kn"&gt;echo&lt;/span&gt; &lt;span class="s"&gt;"response&lt;/span&gt; &lt;span class="s"&gt;text"&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3&gt;Testing&lt;/h3&gt;
+
+&lt;p&gt;Then I start to test how many requests it can process at same time:&lt;/p&gt;
+&lt;pre class="highlight shell"&gt;&lt;code&gt;ab -n 100 -c 100 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; ok&lt;/span&gt;
+ab -n 200 -c 200 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; ok&lt;/span&gt;
+ab -n 500 -c 500 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; socket: Too many open files (24)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Probably we hit system limitation on max open files per process.&lt;/p&gt;
+
+&lt;p&gt;After hours I fine this manual most useful
+http:&amp;#47;&amp;#47;b.oldhu.com&amp;#47;2012&amp;#47;07&amp;#47;19&amp;#47;increase-tcp-max-connections-on-mac-os-x&amp;#47;&lt;/p&gt;
+
+&lt;p&gt;I also increase &lt;code&gt;worker_processes&lt;/code&gt; and &lt;code&gt;worker_connections&lt;/code&gt;in nginx:&lt;/p&gt;
+&lt;pre class="highlight nginx"&gt;&lt;code&gt;&lt;span class="k"&gt;worker_processes&lt;/span&gt;  &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;span class="k"&gt;events&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+  &lt;span class="kn"&gt;worker_connections&lt;/span&gt;  &lt;span class="mi"&gt;4096&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="k"&gt;worker_rlimit_nofile&lt;/span&gt;    &lt;span class="mi"&gt;8000&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;After increase limitations try again &lt;/p&gt;
+&lt;pre class="highlight shell"&gt;&lt;code&gt;ab -n 700 -c 700 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; ok&lt;/span&gt;
+ab -n 900 -c 900 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; sometimes ok&lt;/span&gt;
+&lt;span class="c"&gt;# =&amp;gt; sometimes "apr_socket_recv: Connection reset by peer (54)"&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Keep increasing:&lt;/p&gt;
+&lt;pre class="highlight shell"&gt;&lt;code&gt;ab -n 1100 -c 1100 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; ok or apr_socket_recv error&lt;/span&gt;
+ab -n 3000 -c 3000 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; ok or apr_socket_recv error&lt;/span&gt;
+ab -n 9000 -c 1000 http://127.0.0.1:7080/
+&lt;span class="c"&gt;# =&amp;gt; apr_socket_recv: Connection reset by peer (54)&lt;/span&gt;
+&lt;span class="c"&gt;# =&amp;gt; Total of 455 requests completed&lt;/span&gt;
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;So I could make 3000 parallel requests and get a response in 3.183 sec. But sometimes it fails with error in &lt;code&gt;ab&lt;/code&gt; tool. And it can&amp;#39;t process when reqs &amp;gt; conns. I wasn&amp;#39;t happy with it, so I try:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;wrk&lt;/strong&gt; - it didn&amp;#39;t work before, but after I reboot it seems to work ok&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;httperf&lt;/strong&gt; - I could not manage to send as many request as I want&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;siege&lt;/strong&gt; - was better but still could not make many requests&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;What make me happy is a utility called &lt;strong&gt;boom&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Written in GO and source on github: 
+https:&amp;#47;&amp;#47;github.com&amp;#47;rakyll&amp;#47;boom&lt;/p&gt;
+
+&lt;p&gt;There is no binary for mac, so need to compile:&lt;/p&gt;
+&lt;pre class="highlight shell"&gt;&lt;code&gt;brew install go
+&lt;span class="nb"&gt;export &lt;/span&gt;&lt;span class="nv"&gt;GOPATH&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;~/go
+go get github.com/rakyll/boom
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Using boom:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;~/go/bin/boom -n 8000 -c 1500 -disable-keepalive http://127.0.0.1:7080
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;It has:
+* nice progress bar
+* can handle many requests (eg 30k reqs with 1500 conns) 
+* can handle as much concurrency as I need
+* keep going on error
+* has nice diagram&lt;/p&gt;
+
+&lt;p&gt;Progress bar:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;~/go/bin/boom -n 9000 -c 1500 -disable-keepalive http://127.0.0.1:7080
+4500 / 9000 Boooooooooooooooooooooom                                 ! 50.00 % 9s
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Output looks like this:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;% ~/go/bin/boom -n 9000 -c 1500 -disable-keepalive http://127.0.0.1:7080
+9000 / 9000 Booooooooooooooooooooooooooooooooooooooooooooooooooooooooo! 100.00 % 
+
+Summary:
+  Total:    18.6023 secs.
+  Slowest:  3.2399 secs.
+  Fastest:  2.9995 secs.
+  Average:  3.0652 secs.
+  Requests/sec: 483.8105
+
+Status code distribution:
+  [200] 9000 responses
+
+Response time histogram:
+  2.999 [1] |
+  3.024 [2383]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  3.048 [1883]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  3.072 [2011]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  3.096 [1219]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  3.120 [7] |
+  3.144 [188]   |∎∎∎
+  3.168 [147]   |∎∎
+  3.192 [361]   |∎∎∎∎∎∎
+  3.216 [656]   |∎∎∎∎∎∎∎∎∎∎∎
+  3.240 [144]   |∎∎
+
+Latency distribution:
+  10% in 3.0045 secs.
+  25% in 3.0219 secs.
+  50% in 3.0493 secs.
+  75% in 3.0832 secs.
+  90% in 3.1882 secs.
+  95% in 3.2031 secs.
+  99% in 3.2162 secs.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3&gt;Node.js app:&lt;/h3&gt;
+
+&lt;p&gt;Next I write same functionality in Node.js:&lt;/p&gt;
+&lt;pre class="highlight javascript"&gt;&lt;code&gt;&lt;span class="kr"&gt;const&lt;/span&gt; &lt;span class="nx"&gt;PORT&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;7090&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;reqN&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+
+&lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;server&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;node&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;http&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;createServer&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;function&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;request&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;response&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+  &lt;span class="nx"&gt;console&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;log&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;"Req"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;reqN&lt;/span&gt;&lt;span class="o"&gt;++&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+  &lt;span class="nx"&gt;setTimeout&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;function&lt;/span&gt; &lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="nx"&gt;response&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;setHeader&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'content-type'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'text/plain'&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+    &lt;span class="nx"&gt;response&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;end&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;"response"&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+  &lt;span class="p"&gt;},&lt;/span&gt; &lt;span class="mi"&gt;3000&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;span class="p"&gt;});&lt;/span&gt;
+
+&lt;span class="nx"&gt;server&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;listen&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;7090&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kd"&gt;function&lt;/span&gt;&lt;span class="p"&gt;(){&lt;/span&gt;
+    &lt;span class="nx"&gt;console&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;log&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;"Server listening on: http://localhost:%s"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;PORT&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;span class="p"&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;It does same: wait 3 seconds and response with &lt;code&gt;&amp;quot;response&amp;quot;&lt;/code&gt; body.&lt;/p&gt;
+
+&lt;p&gt;I run it with latest iojs (1.7.1). Benchmark result is almost same:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;~/go/bin/boom -n 15000 -c 1500 -disable-keepalive http://127.0.0.1:7090
+# ...
+Response time histogram:
+  3.000 [1] |
+  3.039 [6930]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎
+  3.078 [1682]  |∎∎∎∎∎∎∎∎∎
+  3.118 [1204]  |∎∎∎∎∎∎
+  3.157 [644]   |∎∎∎
+  3.196 [1016]  |∎∎∎∎∎
+  3.235 [875]   |∎∎∎∎∎
+  3.275 [1291]  |∎∎∎∎∎∎∎
+  3.314 [890]   |∎∎∎∎∎
+  3.353 [262]   |∎
+  3.393 [205]   |∎
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3&gt;Bottom line:&lt;/h3&gt;
+
+&lt;p&gt;For future research and development I prefer to use  &lt;em&gt;boom&lt;/em&gt;, it&amp;#39;s hassle-free, can handle really high number of parallel requests, have nice output.&lt;/p&gt;
+
+&lt;p&gt;In this review I skip tool called jMetter, because it have GUI and looks ugly on mac, also because written in Java&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <title>Synchronous Javascript with fibers</title>
+    <link rel="alternate" href="http://blog.url.com/2015/03/02/synchronous-javascript-with-fibers.html"/>
+    <id>http://blog.url.com/2015/03/02/synchronous-javascript-with-fibers.html</id>
+    <published>2015-03-02T00:00:00+07:00</published>
+    <updated>2015-04-26T13:23:28+07:00</updated>
+    <author>
+      <name>Article Author</name>
+    </author>
+    <content type="html">&lt;p&gt;I was suprised how nice to get rid of endless nested callbacks in javascript.&lt;/p&gt;
+
+&lt;p&gt;I was playing with &lt;a href="https://github.com/laverdet/node-fibers"&gt;node-fibers&lt;/a&gt;, trying to make it easier to write tests.. One day I came up with idea: what if one function can run asynchronously when we call inside fiber and synchronous when passing a callback function. Here&amp;#39;s how I can make it:&lt;/p&gt;
+&lt;pre class="highlight javascript"&gt;&lt;code&gt;
+&lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;Fiber&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;require&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'fibers'&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+
+&lt;span class="c1"&gt;// can be called to convert multiple methods&lt;/span&gt;
+&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;makeSync&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kd"&gt;function&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;receiver&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+  &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;n&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nx"&gt;n&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;length&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nx"&gt;n&lt;/span&gt;&lt;span class="o"&gt;++&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;makeSyncFn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;receiver&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nx"&gt;n&lt;/span&gt;&lt;span class="p"&gt;]);&lt;/span&gt;
+  &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="p"&gt;};&lt;/span&gt;
+
+&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;makeSyncFn&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kd"&gt;function&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;receiver&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;methodName&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;errorArgNum&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+  &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;origFn&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;receiver&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nx"&gt;methodName&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;
+
+  &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;origFn&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="kc"&gt;undefined&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="k"&gt;throw&lt;/span&gt; &lt;span class="s2"&gt;"Object don't have property '"&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="nx"&gt;methodName&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s2"&gt;"'"&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+  &lt;span class="p"&gt;}&lt;/span&gt;
+
+  &lt;span class="nx"&gt;receiver&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nx"&gt;methodName&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kd"&gt;function&lt;/span&gt; &lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;lastArg&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;length&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;
+
+    &lt;span class="c1"&gt;// check if it called inside Fiber&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;current&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class="k"&gt;typeof&lt;/span&gt; &lt;span class="nx"&gt;lastArg&lt;/span&gt; &lt;span class="o"&gt;!=&lt;/span&gt; &lt;span class="s1"&gt;'function'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+      &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;fiber&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;current&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+      &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;newValue&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+      &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;args&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;Array&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;prototype&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;slice&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;call&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+      &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;typeof&lt;/span&gt; &lt;span class="nx"&gt;errorArgNum&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s1"&gt;'undefined'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="nx"&gt;errorArgNum&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+      &lt;span class="nx"&gt;args&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;function&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;data&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+        &lt;span class="c1"&gt;// retrieve error from arguments (optional)&lt;/span&gt;
+        &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;error&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nx"&gt;errorArgNum&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;error&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+          &lt;span class="k"&gt;throw&lt;/span&gt; &lt;span class="nx"&gt;error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+        &lt;span class="p"&gt;}&lt;/span&gt;
+        &lt;span class="c1"&gt;// assign result and resume fiber&lt;/span&gt;
+        &lt;span class="nx"&gt;newValue&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;errorArgNum&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt; &lt;span class="p"&gt;?&lt;/span&gt; &lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nx"&gt;data&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+        &lt;span class="nx"&gt;fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;run&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+      &lt;span class="p"&gt;});&lt;/span&gt;
+
+      &lt;span class="c1"&gt;// call original function with fiber-aware callback&lt;/span&gt;
+      &lt;span class="nx"&gt;origFn&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;apply&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;this&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;args&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+      &lt;span class="c1"&gt;// pause and wait till resume&lt;/span&gt;
+      &lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;yield&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+      &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nx"&gt;newValue&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+    &lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="k"&gt;else&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+      &lt;span class="nx"&gt;origFn&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;apply&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;this&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;arguments&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+    &lt;span class="p"&gt;}&lt;/span&gt;
+  &lt;span class="p"&gt;};&lt;/span&gt;
+&lt;span class="p"&gt;};&lt;/span&gt;
+
+&lt;span class="nx"&gt;module&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;exports&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Fibers provide just one simple thing: stop execution and waiting for resume. For every function with callback we can call it, put fiber on pause then when we get callback - unpause and continue execution. Code become not blocking but asynchronous.&lt;/p&gt;
+
+&lt;p&gt;Here&amp;#39;s how you can use it:&lt;/p&gt;
+&lt;pre class="highlight javascript"&gt;&lt;code&gt;
+&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;makeSyncFn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;redisClient&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'get'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt; &lt;span class="c1"&gt;// 0 is number if error argument passed in callback&lt;/span&gt;
+&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;makeSyncFn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;redisClient&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'set'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+
+&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;function&lt;/span&gt; &lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+  &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;redisClient&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'some_key'&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+  &lt;span class="nx"&gt;redisClient&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'some_key'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;value&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;span class="p"&gt;}).&lt;/span&gt;&lt;span class="nx"&gt;run&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;When we call &lt;code&gt;Fiber.makeSyncFn&lt;/code&gt; it will override original function. If &lt;code&gt;Fiber.current&lt;/code&gt; present and if last argument is not a function then it will run it in fiber-aware wrapper, otherwise it will run in usual way.&lt;/p&gt;
+
+&lt;p&gt;You can also patch prototype in same way:&lt;/p&gt;
+&lt;pre class="highlight javascript"&gt;&lt;code&gt;&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;makeSyncFn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;redis&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;RedisClient&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;prototype&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'set'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;span class="nx"&gt;Fiber&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;makeSyncFn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;redis&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;RedisClient&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;prototype&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'get'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;I made some benchmarks: simple http server, it reads key from redis, increase by 1 and write to redis, I&amp;#39;m creating new fiber for every request. Then I compare it with same http server written in asynchronous way.&lt;/p&gt;
+
+&lt;p&gt;running 5000 times and see:&lt;/p&gt;
+
+&lt;table&gt;&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;name&lt;/th&gt;
+&lt;th&gt;time per request&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;w&amp;#47;fibers&lt;/td&gt;
+&lt;td&gt;0.751ms&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;async&lt;/td&gt;
+&lt;td&gt;0.706ms&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+
+&lt;p&gt;I ran it many times, difference is about 0.1ms - 0.02ms&lt;/p&gt;
+
+&lt;p&gt;Other benchmark is a counter, made to eliminate open-close fiber timing: compare with classic-callback code, overhead is about 0.01ms - 0.007ms, that time spent to pause and unpause a fiber.&lt;/p&gt;
+
+&lt;p&gt;For me I feel pretty glad to make code more readable and maintainable, even I need to trade some microseconds (or milliseconds).&lt;/p&gt;
+
+&lt;p&gt;* As a bonus it gives us a way to track exceptions with try-catch&lt;/p&gt;
+
+&lt;p&gt;When you should NOT use fibers:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;When you want to run some asynchronous things in parallel, for example query db and make http request&lt;/li&gt;
+&lt;li&gt;When you want your code run in browser as well&lt;/li&gt;
+&lt;li&gt;When your callback function receive more then one argument and you need them&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Continue reading: an article about &lt;a href="http://howtonode.org/generators-vs-fibers"&gt;Generators vs Fibers&lt;/a&gt;&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <title>Convert mysql database to postgresql</title>
+    <link rel="alternate" href="http://blog.url.com/2015/01/29/convert-mysql-database-to-postgresql.html"/>
+    <id>http://blog.url.com/2015/01/29/convert-mysql-database-to-postgresql.html</id>
+    <published>2015-01-29T00:00:00+07:00</published>
+    <updated>2015-04-26T13:41:22+07:00</updated>
+    <author>
+      <name>Article Author</name>
+    </author>
+    <content type="html">&lt;p&gt;Today I find tool &lt;strong&gt;pgloader&lt;/strong&gt; &lt;a href="http://pgloader.io/"&gt;http:&amp;#47;&amp;#47;pgloader.io&amp;#47;&lt;/a&gt; to convert database from Mysql to Postgres.&lt;/p&gt;
+
+&lt;p&gt;Precompiled package can be installed from &lt;a href="http://pgloader.io/download.html"&gt;downloads page&lt;/a&gt; or you can compile by yourself from lisp source on &lt;a href="https://github.com/dimitri/pgloader"&gt;github&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Then run it as:&lt;/p&gt;
+&lt;pre class="highlight shell"&gt;&lt;code&gt;psql -c &lt;span class="s2"&gt;"CREATE DATABASE db_name"&lt;/span&gt;
+pgloader mysql://user:pass@localhost/db_name postgres:///db_name
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;It shows warning that can&amp;#39;t find &lt;code&gt;libsybdb.dylib&lt;/code&gt;, press 0 to continue and it working well.&lt;/p&gt;
+
+&lt;p&gt;At the end you will see statistics table:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;                    table name       read   imported     errors            time
+------------------------------  ---------  ---------  ---------  --------------
+               fetch meta data         18         18          0         18.096s
+                  create, drop          0         14          0          0.285s
+------------------------------  ---------  ---------  ---------  --------------
+                   attachments          0          0          0          0.154s
+                        emails       1782       1782          0          2.425s
+                     email_bcc         20         20          0          0.044s
+                      email_cc          0          0          0          0.045s
+                      email_to       1847       1847          0          0.242s
+            http_notifications       1097       1097          0          0.317s
+                     templates          6          6          0          0.171s
+        Index Build Completion          0          0          0          0.000s
+------------------------------  ---------  ---------  ---------  --------------
+                Create Indexes         11         11          0          0.237s
+               Reset Sequences          0          0          0          0.361s
+                  Primary Keys          7          7          0          0.049s
+                  Foreign Keys          4          4          0          0.071s
+                      Comments          0          0          0          0.000s
+------------------------------  ---------  ---------  ---------  --------------
+             Total import time       4752       4752          0         22.260s
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Done!&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <title>Validating hash params in ruby</title>
+    <link rel="alternate" href="http://blog.url.com/2015/01/27/validating-hash-params-in-ruby.html"/>
+    <id>http://blog.url.com/2015/01/27/validating-hash-params-in-ruby.html</id>
+    <published>2015-01-27T00:00:00+07:00</published>
+    <updated>2015-04-26T13:21:25+07:00</updated>
+    <author>
+      <name>Article Author</name>
+    </author>
+    <content type="html">&lt;p&gt;If compare many arguments vs &amp;ldquo;options&amp;rdquo; hash, I usually choose options hash. And I often face problems when I pass wrong key name or what not supported.&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;ActiveSupport&lt;/code&gt; already have &lt;a href="http://apidock.com/rails/Hash/assert_valid_keys"&gt;Hash#assert&lt;em&gt;valid&lt;/em&gt;keys&lt;/a&gt;, I added one more method &lt;code&gt;assert_required_keys&lt;/code&gt;:&lt;/p&gt;
+&lt;pre class="highlight ruby"&gt;&lt;code&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Hash&lt;/span&gt;
+  &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;assert_required_keys&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;keys&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;keys&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;flatten&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;each&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+      &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="no"&gt;ArgumentError&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;"Required key: &lt;/span&gt;&lt;span class="si"&gt;#{&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;inspect&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;"&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;unless&lt;/span&gt; &lt;span class="n"&gt;has_key?&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;end&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Here is my solution to validate hash keys:&lt;/p&gt;
+&lt;pre class="highlight ruby"&gt;&lt;code&gt;&lt;span class="k"&gt;module&lt;/span&gt; &lt;span class="nn"&gt;ValidateOptions&lt;/span&gt;
+  &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;validate_options!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:optional&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;||=&lt;/span&gt; &lt;span class="p"&gt;[]&lt;/span&gt;
+    &lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:required&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;||=&lt;/span&gt; &lt;span class="p"&gt;[]&lt;/span&gt;
+
+    &lt;span class="n"&gt;params&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;deep_symbolize_keys&lt;/span&gt;
+    &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;assert_required_keys&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:required&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+    &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;assert_valid_keys&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:required&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:optional&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+  &lt;span class="k"&gt;end&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Usage example:&lt;/p&gt;
+&lt;pre class="highlight ruby"&gt;&lt;code&gt;&lt;span class="kp"&gt;include&lt;/span&gt; &lt;span class="no"&gt;ValidateOptions&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;method_with_options&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{})&lt;/span&gt;
+  &lt;span class="n"&gt;validate_options!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="ss"&gt;required: &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:order_id&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:subject&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:from&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:to&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:text_body&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:html_body&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;
+    &lt;span class="ss"&gt;optional: &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="ss"&gt;:cc&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:bcc&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ss"&gt;:template_name&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+  &lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;end&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+</content>
+  </entry>
+  <entry>
+    <title>Handle exceptions in D</title>
+    <link rel="alternate" href="http://blog.url.com/2015/01/14/handle-exceptions-in-d.html"/>
+    <id>http://blog.url.com/2015/01/14/handle-exceptions-in-d.html</id>
+    <published>2015-01-14T00:00:00+07:00</published>
+    <updated>2015-04-26T13:17:12+07:00</updated>
+    <author>
+      <name>Article Author</name>
+    </author>
+    <content type="html">&lt;p&gt;Here&amp;#39;s how to handle exceptions in D.&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;try {
+    throw new Exception("error message");
+} catch (Exception error) {
+    writefln("Error catched: %s", error.msg);
+} finally {
+    writefln("in finaly block");
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code&gt;catch (Exception error)&lt;/code&gt; will catch all exception of type &lt;code&gt;Exception&lt;/code&gt; and child (inhereted) types.&lt;/p&gt;
+
+&lt;h3&gt;Error types structure&lt;/h3&gt;
+
+&lt;p&gt;Here is a list of standart error types in D (not complete)&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;Throwable
+  - Error
+    - AssertError
+    - FinalizeError
+    - HiddenFuncError
+    - InvalidMemoryOperationError
+    - OutOfMemoryError
+    - RangeError
+    - SwitchError
+  - Exception
+    - ErrnoException
+    - UnicodeException
+    - FileException (std.file)
+    - ProcessException (std.process)
+    - RegexException (std.regex)
+    - DateTimeException (std.datetime)
+    - TimeException (core.time)
+    - StdioException (std.stdio)
+    - StringException (std.string)
+    - AddressException, HostException, SocketException, ... (std.socket)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3&gt;Custom errors&lt;/h3&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;// Define custom exception class
+class ArgumentError : Exception {
+    this(string msg, string file = __FILE__, size_t line = __LINE__) {
+        super(msg, file, line);
+    }
+}
+
+// Throw custom class error
+throw new ArgumentError("first argument array should be not empty");
+
+// Catch custom error
+try {
+    someFunction([]);
+} catch (ArgumentError error) {
+    writeln("ERROR: ", error.msg);
+    return 1;
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;We need to add &lt;code&gt;string file = __FILE__, size_t line = __LINE__&lt;/code&gt; which will automatically add position where exception was thrown, without it stacktrace will show line number of &lt;code&gt;super(msg)&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h3&gt;More&lt;/h3&gt;
+
+&lt;p&gt;&lt;code&gt;nothrow&lt;/code&gt; functions can not throw any exceptions. It&amp;#39;s made to indicate for developers who will use your function, also for better compiled code generation.&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;ulong size() nothrow { return m_size; }
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Read more:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://ddili.org/ders/d.en/exceptions.html"&gt;http:&amp;#47;&amp;#47;ddili.org&amp;#47;ders&amp;#47;d.en&amp;#47;exceptions.html&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="http://dlang.org/library/core/exception.html"&gt;http:&amp;#47;&amp;#47;dlang.org&amp;#47;library&amp;#47;core&amp;#47;exception.html&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+  </entry>
+  <entry>
+    <title>Anonymous functions in D</title>
+    <link rel="alternate" href="http://blog.url.com/2015/01/13/anonymous-functions-in-d.html"/>
+    <id>http://blog.url.com/2015/01/13/anonymous-functions-in-d.html</id>
+    <published>2015-01-13T00:00:00+07:00</published>
+    <updated>2015-04-26T13:19:30+07:00</updated>
+    <author>
+      <name>Article Author</name>
+    </author>
+    <content type="html">&lt;p&gt;We can use anonymous functions in &lt;a href="http://dlang.org/"&gt;D&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2&gt;&lt;code&gt;delegate&lt;/code&gt;  keyword&lt;/h2&gt;
+
+&lt;p&gt;Example with argument:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;import std.stdio;
+
+void evenNumbers(int[] numbers, void delegate(int) callback) {
+    foreach (int number; numbers) {
+        if (number % 2 == 0) callback(number);
+    }
+}
+
+void main() {
+    auto numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    evenNumbers(numbers, (num) =&amp;gt; writeln(num));
+    // or numbers.evenNumbers((num) =&amp;gt; writeln(num));
+    // or numbers.evenNumbers((num) { writeln(num); });
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;In this case &lt;code&gt;(num) =&amp;gt; writeln(num)&lt;/code&gt; is an argument, callable function.&lt;/p&gt;
+
+&lt;p&gt;Output:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;% rdmd delegate.d
+2
+4
+6
+8
+10
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Alternative syntax, ruby&amp;#39;s blocks style:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;import std.stdio, std.string, std.file, std.path;
+
+void withingDir(string dir, void delegate() callback) {
+    auto cwd = absolutePath(".").chomp(".");
+    writeln("Current directory is: ", cwd);
+    chdir(dir);
+    callback();
+    chdir(cwd);
+}
+
+void main() {
+    withingDir("/var", {
+        writefln("I'm in %s", absolutePath(".").chomp("."));
+    });
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Output:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;% rdmd delegate.d
+Current directory is: /Users/pavel/d-try/
+I'm in /private/var/
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If I want to have more rubish syntax I can make like this:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;alias void delegate() Block;
+
+void withingDir(string dir, Block callback) {
+    ...
+}
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2&gt;&lt;code&gt;function&lt;/code&gt; keyword.&lt;/h2&gt;
+
+&lt;p&gt;I don&amp;#39;t know what is a difference between &lt;code&gt;delegate&lt;/code&gt; and &lt;code&gt;function&lt;/code&gt;, they doing same job.&lt;/p&gt;
+
+&lt;p&gt;Example one:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;import std.stdio;
+
+void evenNumbers(int[] numbers, void function(int) callback) {
+    foreach (int number; numbers) {
+        if (number % 2 == 0) callback(number);
+    }
+}
+
+void main() {
+    auto numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    numbers.evenNumbers(function (num) {
+        writeln(num);
+    });
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Example two:&lt;/p&gt;
+&lt;pre class="highlight plaintext"&gt;&lt;code&gt;import std.stdio, std.string, std.file, std.path;
+
+void withingDir(string dir, void function() callback) {
+    auto cwd = absolutePath(".").chomp(".");
+    writeln("Current directory is: ", cwd);
+    chdir(dir);
+    callback();
+    chdir(cwd);
+}
+
+void main() {
+    withingDir("/var", function () {
+        writefln("I'm in %s", absolutePath(".").chomp("."));
+    });
+    // or withingDir("/var", { ... });
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Read more:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://ddili.org/ders/d.en/lambda.html"&gt;http:&amp;#47;&amp;#47;ddili.org&amp;#47;ders&amp;#47;d.en&amp;#47;lambda.html&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+  </entry>
+</feed>

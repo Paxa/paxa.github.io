@@ -1,0 +1,4 @@
+User-Agent: *
+Allow: /
+
+Sitemap: http://paxa.github.io/sitemap.xml

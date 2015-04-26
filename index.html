@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta content='IE=edge;chrome=1' http-equiv='X-UA-Compatible'>
+    <meta content='width=device-width, initial-scale=1, user-scalable=yes' name='viewport'>
+    <meta content='#9CE8AC' name='theme-color'>
+    <title>
+      PE-Notes
+    </title>
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="/feed.xml" />
+    <link href="/stylesheets/application-24cc418f.css" rel="stylesheet" type="text/css" />
+    <link href="/stylesheets/mobile-b135630e.css" rel="stylesheet" type="text/css" media="only screen and (max-device-width : 640px), screen and (max-width : 640px)" />
+  </head>
+  <body>
+    <header>
+      <div class='inner'><a href='/'><h2>Pavel's Notes</h2>
+        <br>
+        <h4>About programming in Ruby, Javascript, D</h4></a></div>
+    </header>
+    <div class='page-wrapper'>
+      <div id='main' role='main'>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2015/04/17/testing-high-concurrency-http-server.html">Testing high concurrency http server</a>
+            <br>
+            <span class='date'>Apr 17, 2015</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>I was making some research for one of upcoming project at my job. I needed to test http server if it can handle 500-1500 concurrent requests.</p>
+          
+          <p>It&#39;s was more hard to make right testing rather then right server. Web server don&#39;t have any record in error log and could process requests that I sent with curl while load test is running.</p>
+          
+          <h3>Setup</h3>
+          
+          <p>First I setup Nginx with <a href="http://wiki.nginx.org/HttpEchoModule">HttpEchoModule</a>, I used <a href="http://openresty.org/">openresty</a> to easily configure and compile with extra modules.</p>
+          
+          <p>Next I create config to wait 3 seconds and response with some text.</p>
+          
+          <p>I choose nginx as example to compare with real application.</p>
+          <pre class="highlight nginx"><code><span class="k">location</span> <span class="n">/</span> <span class="p">{</span>&#x000A;    <span class="kn">add_header</span> <span class="s">Content-Disposition</span> <span class="s">"inline"</span><span class="p">;</span>&#x000A;    <span class="kn">add_header</span> <span class="s">Content-Type</span> <span class="s">"text/plain"</span><span class="p">;</span>&#x000A;&#x000A;    <span class="kn">echo_sleep</span> <span class="mi">3</span><span class="p">;</span>&#x000A;    <span class="kn">echo</span> <span class="s">"response</span> <span class="s">text"</span><span class="p">;</span>&#x000A;<span class="p">}</span>&#x000A;</code></pre>
+          
+          <h3>Testing</h3>
+          
+          <p>Then I start to test how many requests it can process at same time:</p>
+          <pre class="highlight shell"><code>ab -n 100 -c 100 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; ok</span>&#x000A;ab -n 200 -c 200 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; ok</span>&#x000A;ab -n 500 -c 500 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; socket: Too many open files (24)</span>&#x000A;</code></pre>
+          
+          <p>Probably we hit system limitation on max open files per process.</p>
+          
+          <p>After hours I fine this manual most useful
+          http:&#47;&#47;b.oldhu.com&#47;2012&#47;07&#47;19&#47;increase-tcp-max-connections-on-mac-os-x&#47;</p>
+          
+          <p>I also increase <code>worker_processes</code> and <code>worker_connections</code>in nginx:</p>
+          <pre class="highlight nginx"><code><span class="k">worker_processes</span>  <span class="mi">2</span><span class="p">;</span>&#x000A;<span class="k">events</span> <span class="p">{</span>&#x000A;  <span class="kn">worker_connections</span>  <span class="mi">4096</span><span class="p">;</span>&#x000A;<span class="p">}</span>&#x000A;<span class="k">worker_rlimit_nofile</span>    <span class="mi">8000</span><span class="p">;</span>&#x000A;</code></pre>
+          
+          <p>After increase limitations try again </p>
+          <pre class="highlight shell"><code>ab -n 700 -c 700 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; ok</span>&#x000A;ab -n 900 -c 900 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; sometimes ok</span>&#x000A;<span class="c"># =&gt; sometimes "apr_socket_recv: Connection reset by peer (54)"</span>&#x000A;</code></pre>
+          
+          <p>Keep increasing:</p>
+          <pre class="highlight shell"><code>ab -n 1100 -c 1100 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; ok or apr_socket_recv error</span>&#x000A;ab -n 3000 -c 3000 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; ok or apr_socket_recv error</span>&#x000A;ab -n 9000 -c 1000 http://127.0.0.1:7080/&#x000A;<span class="c"># =&gt; apr_socket_recv: Connection reset by peer (54)</span>&#x000A;<span class="c"># =&gt; Total of 455 requests completed</span>&#x000A;&#x000A;</code></pre>
+          
+          <p>So I could make 3000 parallel requests and get a response in 3.183 sec. But sometimes it fails with error in <code>ab</code> tool. And it can&#39;t process when reqs &gt; conns. I wasn&#39;t happy with it, so I try:</p>
+          
+          <ul>
+          <li><strong>wrk</strong> - it didn&#39;t work before, but after I reboot it seems to work ok</li>
+          <li><strong>httperf</strong> - I could not manage to send as many request as I want</li>
+          <li><strong>siege</strong> - was better but still could not make many requests</li>
+          </ul>
+          
+          <p>What make me happy is a utility called <strong>boom</strong></p>
+          
+          <p>Written in GO and source on github: 
+          https:&#47;&#47;github.com&#47;rakyll&#47;boom</p>
+          
+          <p>There is no binary for mac, so need to compile:</p>
+          <pre class="highlight shell"><code>brew install go&#x000A;<span class="nb">export </span><span class="nv">GOPATH</span><span class="o">=</span>~/go&#x000A;go get github.com/rakyll/boom&#x000A;</code></pre>
+          
+          <p>Using boom:</p>
+          <pre class="highlight plaintext"><code>~/go/bin/boom -n 8000 -c 1500 -disable-keepalive http://127.0.0.1:7080&#x000A;</code></pre>
+          
+          <p>It has:
+          * nice progress bar
+          * can handle many requests (eg 30k reqs with 1500 conns) 
+          * can handle as much concurrency as I need
+          * keep going on error
+          * has nice diagram</p>
+          
+          <p>Progress bar:</p>
+          <pre class="highlight plaintext"><code>~/go/bin/boom -n 9000 -c 1500 -disable-keepalive http://127.0.0.1:7080&#x000A;4500 / 9000 Boooooooooooooooooooooom                                 ! 50.00 % 9s&#x000A;</code></pre>
+          
+          <p>Output looks like this:</p>
+          <pre class="highlight plaintext"><code>% ~/go/bin/boom -n 9000 -c 1500 -disable-keepalive http://127.0.0.1:7080&#x000A;9000 / 9000 Booooooooooooooooooooooooooooooooooooooooooooooooooooooooo! 100.00 % &#x000A;&#x000A;Summary:&#x000A;  Total:    18.6023 secs.&#x000A;  Slowest:  3.2399 secs.&#x000A;  Fastest:  2.9995 secs.&#x000A;  Average:  3.0652 secs.&#x000A;  Requests/sec: 483.8105&#x000A;&#x000A;Status code distribution:&#x000A;  [200] 9000 responses&#x000A;&#x000A;Response time histogram:&#x000A;  2.999 [1] |&#x000A;  3.024 [2383]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎&#x000A;  3.048 [1883]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎&#x000A;  3.072 [2011]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎&#x000A;  3.096 [1219]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎&#x000A;  3.120 [7] |&#x000A;  3.144 [188]   |∎∎∎&#x000A;  3.168 [147]   |∎∎&#x000A;  3.192 [361]   |∎∎∎∎∎∎&#x000A;  3.216 [656]   |∎∎∎∎∎∎∎∎∎∎∎&#x000A;  3.240 [144]   |∎∎&#x000A;&#x000A;Latency distribution:&#x000A;  10% in 3.0045 secs.&#x000A;  25% in 3.0219 secs.&#x000A;  50% in 3.0493 secs.&#x000A;  75% in 3.0832 secs.&#x000A;  90% in 3.1882 secs.&#x000A;  95% in 3.2031 secs.&#x000A;  99% in 3.2162 secs.&#x000A;</code></pre>
+          
+          <h3>Node.js app:</h3>
+          
+          <p>Next I write same functionality in Node.js:</p>
+          <pre class="highlight javascript"><code><span class="kr">const</span> <span class="nx">PORT</span> <span class="o">=</span> <span class="mi">7090</span><span class="p">;</span>&#x000A;<span class="kd">var</span> <span class="nx">reqN</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>&#x000A;&#x000A;<span class="kd">var</span> <span class="nx">server</span> <span class="o">=</span> <span class="nx">node</span><span class="p">.</span><span class="nx">http</span><span class="p">.</span><span class="nx">createServer</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">request</span><span class="p">,</span> <span class="nx">response</span><span class="p">)</span> <span class="p">{</span>&#x000A;  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">"Req"</span><span class="p">,</span> <span class="nx">reqN</span><span class="o">++</span><span class="p">);</span>&#x000A;  <span class="nx">setTimeout</span><span class="p">(</span><span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>&#x000A;    <span class="nx">response</span><span class="p">.</span><span class="nx">setHeader</span><span class="p">(</span><span class="s1">'content-type'</span><span class="p">,</span> <span class="s1">'text/plain'</span><span class="p">);</span>&#x000A;    <span class="nx">response</span><span class="p">.</span><span class="nx">end</span><span class="p">(</span><span class="s2">"response"</span><span class="p">);</span>&#x000A;  <span class="p">},</span> <span class="mi">3000</span><span class="p">);</span>&#x000A;<span class="p">});</span>&#x000A;&#x000A;<span class="nx">server</span><span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="mi">7090</span><span class="p">,</span> <span class="kd">function</span><span class="p">(){</span>&#x000A;    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">"Server listening on: http://localhost:%s"</span><span class="p">,</span> <span class="nx">PORT</span><span class="p">);</span>&#x000A;<span class="p">});</span>&#x000A;</code></pre>
+          
+          <p>It does same: wait 3 seconds and response with <code>&quot;response&quot;</code> body.</p>
+          
+          <p>I run it with latest iojs (1.7.1). Benchmark result is almost same:</p>
+          <pre class="highlight plaintext"><code>~/go/bin/boom -n 15000 -c 1500 -disable-keepalive http://127.0.0.1:7090&#x000A;# ...&#x000A;Response time histogram:&#x000A;  3.000 [1] |&#x000A;  3.039 [6930]  |∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎∎&#x000A;  3.078 [1682]  |∎∎∎∎∎∎∎∎∎&#x000A;  3.118 [1204]  |∎∎∎∎∎∎&#x000A;  3.157 [644]   |∎∎∎&#x000A;  3.196 [1016]  |∎∎∎∎∎&#x000A;  3.235 [875]   |∎∎∎∎∎&#x000A;  3.275 [1291]  |∎∎∎∎∎∎∎&#x000A;  3.314 [890]   |∎∎∎∎∎&#x000A;  3.353 [262]   |∎&#x000A;  3.393 [205]   |∎&#x000A;</code></pre>
+          
+          <h3>Bottom line:</h3>
+          
+          <p>For future research and development I prefer to use  <em>boom</em>, it&#39;s hassle-free, can handle really high number of parallel requests, have nice output.</p>
+          
+          <p>In this review I skip tool called jMetter, because it have GUI and looks ugly on mac, also because written in Java</p>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2015/03/02/synchronous-javascript-with-fibers.html">Synchronous Javascript with fibers</a>
+            <br>
+            <span class='date'>Mar  2, 2015</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>I was suprised how nice to get rid of endless nested callbacks in javascript.</p>
+          
+          <p>I was playing with <a href="https://github.com/laverdet/node-fibers">node-fibers</a>, trying to make it easier to write tests.. One day I came up with idea: what if one function can run asynchronously when we call inside fiber and synchronous when passing a callback function. Here&#39;s how I can make it:</p>
+          <pre class="highlight javascript"><code>&#x000A;<span class="kd">var</span> <span class="nx">Fiber</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">'fibers'</span><span class="p">);</span>&#x000A;&#x000A;<span class="c1">// can be called to convert multiple methods</span>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSync</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">receiver</span><span class="p">)</span> <span class="p">{</span>&#x000A;  <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">n</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="nx">n</span> <span class="o">&lt;</span> <span class="nx">arguments</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">n</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>&#x000A;    <span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">receiver</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">[</span><span class="nx">n</span><span class="p">]);</span>&#x000A;  <span class="p">}</span>&#x000A;<span class="p">};</span>&#x000A;&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">receiver</span><span class="p">,</span> <span class="nx">methodName</span><span class="p">,</span> <span class="nx">errorArgNum</span><span class="p">)</span> <span class="p">{</span>&#x000A;  <span class="kd">var</span> <span class="nx">origFn</span> <span class="o">=</span> <span class="nx">receiver</span><span class="p">[</span><span class="nx">methodName</span><span class="p">];</span>&#x000A;&#x000A;  <span class="k">if</span> <span class="p">(</span><span class="nx">origFn</span> <span class="o">==</span> <span class="kc">undefined</span><span class="p">)</span> <span class="p">{</span>&#x000A;    <span class="k">throw</span> <span class="s2">"Object don't have property '"</span> <span class="o">+</span> <span class="nx">methodName</span> <span class="o">+</span> <span class="s2">"'"</span><span class="p">;</span>&#x000A;  <span class="p">}</span>&#x000A;&#x000A;  <span class="nx">receiver</span><span class="p">[</span><span class="nx">methodName</span><span class="p">]</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>&#x000A;    <span class="kd">var</span> <span class="nx">lastArg</span> <span class="o">=</span> <span class="nx">arguments</span><span class="p">[</span><span class="nx">arguments</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">];</span>&#x000A;&#x000A;    <span class="c1">// check if it called inside Fiber</span>&#x000A;    <span class="k">if</span> <span class="p">(</span><span class="nx">Fiber</span><span class="p">.</span><span class="nx">current</span> <span class="o">&amp;&amp;</span> <span class="k">typeof</span> <span class="nx">lastArg</span> <span class="o">!=</span> <span class="s1">'function'</span><span class="p">)</span> <span class="p">{</span>&#x000A;      <span class="kd">var</span> <span class="nx">fiber</span> <span class="o">=</span> <span class="nx">Fiber</span><span class="p">.</span><span class="nx">current</span><span class="p">;</span>&#x000A;      <span class="kd">var</span> <span class="nx">newValue</span><span class="p">;</span>&#x000A;      <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="nb">Array</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">slice</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">arguments</span><span class="p">);</span>&#x000A;      <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">errorArgNum</span> <span class="o">==</span> <span class="s1">'undefined'</span><span class="p">)</span> <span class="nx">errorArgNum</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>&#x000A;      <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="p">{</span>&#x000A;        <span class="c1">// retrieve error from arguments (optional)</span>&#x000A;        <span class="kd">var</span> <span class="nx">error</span> <span class="o">=</span> <span class="nx">arguments</span><span class="p">[</span><span class="nx">errorArgNum</span><span class="p">];</span>&#x000A;        <span class="k">if</span> <span class="p">(</span><span class="nx">error</span><span class="p">)</span> <span class="p">{</span>&#x000A;          <span class="k">throw</span> <span class="nx">error</span><span class="p">;</span>&#x000A;        <span class="p">}</span>&#x000A;        <span class="c1">// assign result and resume fiber</span>&#x000A;        <span class="nx">newValue</span> <span class="o">=</span> <span class="nx">errorArgNum</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">?</span> <span class="nx">arguments</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="p">:</span> <span class="nx">data</span><span class="p">;</span>&#x000A;        <span class="nx">fiber</span><span class="p">.</span><span class="nx">run</span><span class="p">();</span>&#x000A;      <span class="p">});</span>&#x000A;&#x000A;      <span class="c1">// call original function with fiber-aware callback</span>&#x000A;      <span class="nx">origFn</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>&#x000A;      <span class="c1">// pause and wait till resume</span>&#x000A;      <span class="nx">Fiber</span><span class="p">.</span><span class="nx">yield</span><span class="p">();</span>&#x000A;      <span class="k">return</span> <span class="nx">newValue</span><span class="p">;</span>&#x000A;    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>&#x000A;      <span class="nx">origFn</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">);</span>&#x000A;    <span class="p">}</span>&#x000A;  <span class="p">};</span>&#x000A;<span class="p">};</span>&#x000A;&#x000A;<span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="nx">Fiber</span><span class="p">;</span>&#x000A;</code></pre>
+          
+          <p>Fibers provide just one simple thing: stop execution and waiting for resume. For every function with callback we can call it, put fiber on pause then when we get callback - unpause and continue execution. Code become not blocking but asynchronous.</p>
+          
+          <p>Here&#39;s how you can use it:</p>
+          <pre class="highlight javascript"><code>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redisClient</span><span class="p">,</span> <span class="s1">'get'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span> <span class="c1">// 0 is number if error argument passed in callback</span>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redisClient</span><span class="p">,</span> <span class="s1">'set'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>&#x000A;&#x000A;<span class="nx">Fiber</span><span class="p">(</span><span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>&#x000A;  <span class="kd">var</span> <span class="nx">value</span> <span class="o">=</span> <span class="nx">redisClient</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">'some_key'</span><span class="p">);</span>&#x000A;  <span class="nx">redisClient</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">'some_key'</span><span class="p">,</span> <span class="nx">value</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>&#x000A;<span class="p">}).</span><span class="nx">run</span><span class="p">();</span>&#x000A;&#x000A;</code></pre>
+          
+          <p>When we call <code>Fiber.makeSyncFn</code> it will override original function. If <code>Fiber.current</code> present and if last argument is not a function then it will run it in fiber-aware wrapper, otherwise it will run in usual way.</p>
+          
+          <p>You can also patch prototype in same way:</p>
+          <pre class="highlight javascript"><code><span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redis</span><span class="p">.</span><span class="nx">RedisClient</span><span class="p">.</span><span class="nx">prototype</span><span class="p">,</span> <span class="s1">'set'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redis</span><span class="p">.</span><span class="nx">RedisClient</span><span class="p">.</span><span class="nx">prototype</span><span class="p">,</span> <span class="s1">'get'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>&#x000A;</code></pre>
+          
+          <p>I made some benchmarks: simple http server, it reads key from redis, increase by 1 and write to redis, I&#39;m creating new fiber for every request. Then I compare it with same http server written in asynchronous way.</p>
+          
+          <p>running 5000 times and see:</p>
+          
+          <table><thead>
+          <tr>
+          <th>name</th>
+          <th>time per request</th>
+          </tr>
+          </thead><tbody>
+          <tr>
+          <td>w&#47;fibers</td>
+          <td>0.751ms</td>
+          </tr>
+          <tr>
+          <td>async</td>
+          <td>0.706ms</td>
+          </tr>
+          </tbody></table>
+          
+          <p>I ran it many times, difference is about 0.1ms - 0.02ms</p>
+          
+          <p>Other benchmark is a counter, made to eliminate open-close fiber timing: compare with classic-callback code, overhead is about 0.01ms - 0.007ms, that time spent to pause and unpause a fiber.</p>
+          
+          <p>For me I feel pretty glad to make code more readable and maintainable, even I need to trade some microseconds (or milliseconds).</p>
+          
+          <p>* As a bonus it gives us a way to track exceptions with try-catch</p>
+          
+          <p>When you should NOT use fibers:</p>
+          
+          <ul>
+          <li>When you want to run some asynchronous things in parallel, for example query db and make http request</li>
+          <li>When you want your code run in browser as well</li>
+          <li>When your callback function receive more then one argument and you need them</li>
+          </ul>
+          
+          <p>Continue reading: an article about <a href="http://howtonode.org/generators-vs-fibers">Generators vs Fibers</a></p>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2015/01/29/convert-mysql-database-to-postgresql.html">Convert mysql database to postgresql</a>
+            <br>
+            <span class='date'>Jan 29, 2015</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>Today I find tool <strong>pgloader</strong> <a href="http://pgloader.io/">http:&#47;&#47;pgloader.io&#47;</a> to convert database from Mysql to Postgres.</p>
+          
+          <p>Precompiled package can be installed from <a href="http://pgloader.io/download.html">downloads page</a> or you can compile by yourself from lisp source on <a href="https://github.com/dimitri/pgloader">github</a>.</p>
+          
+          <p>Then run it as:</p>
+          <pre class="highlight shell"><code>psql -c <span class="s2">"CREATE DATABASE db_name"</span>&#x000A;pgloader mysql://user:pass@localhost/db_name postgres:///db_name&#x000A;</code></pre>
+          
+          <p>It shows warning that can&#39;t find <code>libsybdb.dylib</code>, press 0 to continue and it working well.</p>
+          
+          <p>At the end you will see statistics table:</p>
+          <pre class="highlight plaintext"><code>                    table name       read   imported     errors            time&#x000A;------------------------------  ---------  ---------  ---------  --------------&#x000A;               fetch meta data         18         18          0         18.096s&#x000A;                  create, drop          0         14          0          0.285s&#x000A;------------------------------  ---------  ---------  ---------  --------------&#x000A;                   attachments          0          0          0          0.154s&#x000A;                        emails       1782       1782          0          2.425s&#x000A;                     email_bcc         20         20          0          0.044s&#x000A;                      email_cc          0          0          0          0.045s&#x000A;                      email_to       1847       1847          0          0.242s&#x000A;            http_notifications       1097       1097          0          0.317s&#x000A;                     templates          6          6          0          0.171s&#x000A;        Index Build Completion          0          0          0          0.000s&#x000A;------------------------------  ---------  ---------  ---------  --------------&#x000A;                Create Indexes         11         11          0          0.237s&#x000A;               Reset Sequences          0          0          0          0.361s&#x000A;                  Primary Keys          7          7          0          0.049s&#x000A;                  Foreign Keys          4          4          0          0.071s&#x000A;                      Comments          0          0          0          0.000s&#x000A;------------------------------  ---------  ---------  ---------  --------------&#x000A;             Total import time       4752       4752          0         22.260s&#x000A;</code></pre>
+          
+          <p>Done!</p>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2015/01/27/validating-hash-params-in-ruby.html">Validating hash params in ruby</a>
+            <br>
+            <span class='date'>Jan 27, 2015</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>If compare many arguments vs &ldquo;options&rdquo; hash, I usually choose options hash. And I often face problems when I pass wrong key name or what not supported.</p>
+          
+          <p><code>ActiveSupport</code> already have <a href="http://apidock.com/rails/Hash/assert_valid_keys">Hash#assert<em>valid</em>keys</a>, I added one more method <code>assert_required_keys</code>:</p>
+          <pre class="highlight ruby"><code><span class="k">class</span> <span class="nc">Hash</span>&#x000A;  <span class="k">def</span> <span class="nf">assert_required_keys</span><span class="p">(</span><span class="o">*</span><span class="n">keys</span><span class="p">)</span>&#x000A;    <span class="n">keys</span><span class="p">.</span><span class="nf">flatten</span><span class="p">.</span><span class="nf">each</span> <span class="k">do</span> <span class="o">|</span><span class="n">key</span><span class="o">|</span>&#x000A;      <span class="k">raise</span> <span class="no">ArgumentError</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="s2">"Required key: </span><span class="si">#{</span><span class="n">key</span><span class="p">.</span><span class="nf">inspect</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="k">unless</span> <span class="n">has_key?</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>&#x000A;    <span class="k">end</span>&#x000A;  <span class="k">end</span>&#x000A;<span class="k">end</span>&#x000A;</code></pre>
+          
+          <p>Here is my solution to validate hash keys:</p>
+          <pre class="highlight ruby"><code><span class="k">module</span> <span class="nn">ValidateOptions</span>&#x000A;  <span class="k">def</span> <span class="nf">validate_options!</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>&#x000A;    <span class="n">options</span><span class="p">[</span><span class="ss">:optional</span><span class="p">]</span> <span class="o">||=</span> <span class="p">[]</span>&#x000A;    <span class="n">options</span><span class="p">[</span><span class="ss">:required</span><span class="p">]</span> <span class="o">||=</span> <span class="p">[]</span>&#x000A;&#x000A;    <span class="n">params</span> <span class="o">=</span> <span class="n">params</span><span class="p">.</span><span class="nf">deep_symbolize_keys</span>&#x000A;    <span class="n">params</span><span class="p">.</span><span class="nf">assert_required_keys</span><span class="p">(</span><span class="n">options</span><span class="p">[</span><span class="ss">:required</span><span class="p">])</span>&#x000A;    <span class="n">params</span><span class="p">.</span><span class="nf">assert_valid_keys</span><span class="p">(</span><span class="n">options</span><span class="p">[</span><span class="ss">:required</span><span class="p">]</span> <span class="o">+</span> <span class="n">options</span><span class="p">[</span><span class="ss">:optional</span><span class="p">])</span>&#x000A;  <span class="k">end</span>&#x000A;<span class="k">end</span>&#x000A;</code></pre>
+          
+          <p>Usage example:</p>
+          <pre class="highlight ruby"><code><span class="kp">include</span> <span class="no">ValidateOptions</span>&#x000A;&#x000A;<span class="k">def</span> <span class="nf">method_with_options</span><span class="p">(</span><span class="n">options</span> <span class="o">=</span> <span class="p">{})</span>&#x000A;  <span class="n">validate_options!</span><span class="p">(</span><span class="n">options</span><span class="p">,</span>&#x000A;    <span class="ss">required: </span><span class="p">[</span><span class="ss">:order_id</span><span class="p">,</span> <span class="ss">:subject</span><span class="p">,</span> <span class="ss">:from</span><span class="p">,</span> <span class="ss">:to</span><span class="p">,</span> <span class="ss">:text_body</span><span class="p">,</span> <span class="ss">:html_body</span><span class="p">],</span>&#x000A;    <span class="ss">optional: </span><span class="p">[</span><span class="ss">:cc</span><span class="p">,</span> <span class="ss">:bcc</span><span class="p">,</span> <span class="ss">:template_name</span><span class="p">]</span>&#x000A;  <span class="p">)</span>&#x000A;<span class="k">end</span>&#x000A;</code></pre>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2015/01/14/handle-exceptions-in-d.html">Handle exceptions in D</a>
+            <br>
+            <span class='date'>Jan 14, 2015</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>Here&#39;s how to handle exceptions in D.</p>
+          <pre class="highlight plaintext"><code>try {&#x000A;    throw new Exception("error message");&#x000A;} catch (Exception error) {&#x000A;    writefln("Error catched: %s", error.msg);&#x000A;} finally {&#x000A;    writefln("in finaly block");&#x000A;}&#x000A;</code></pre>
+          
+          <p><code>catch (Exception error)</code> will catch all exception of type <code>Exception</code> and child (inhereted) types.</p>
+          
+          <h3>Error types structure</h3>
+          
+          <p>Here is a list of standart error types in D (not complete)</p>
+          <pre class="highlight plaintext"><code>Throwable&#x000A;  - Error&#x000A;    - AssertError&#x000A;    - FinalizeError&#x000A;    - HiddenFuncError&#x000A;    - InvalidMemoryOperationError&#x000A;    - OutOfMemoryError&#x000A;    - RangeError&#x000A;    - SwitchError&#x000A;  - Exception&#x000A;    - ErrnoException&#x000A;    - UnicodeException&#x000A;    - FileException (std.file)&#x000A;    - ProcessException (std.process)&#x000A;    - RegexException (std.regex)&#x000A;    - DateTimeException (std.datetime)&#x000A;    - TimeException (core.time)&#x000A;    - StdioException (std.stdio)&#x000A;    - StringException (std.string)&#x000A;    - AddressException, HostException, SocketException, ... (std.socket)&#x000A;</code></pre>
+          
+          <h3>Custom errors</h3>
+          <pre class="highlight plaintext"><code>// Define custom exception class&#x000A;class ArgumentError : Exception {&#x000A;    this(string msg, string file = __FILE__, size_t line = __LINE__) {&#x000A;        super(msg, file, line);&#x000A;    }&#x000A;}&#x000A;&#x000A;// Throw custom class error&#x000A;throw new ArgumentError("first argument array should be not empty");&#x000A;&#x000A;// Catch custom error&#x000A;try {&#x000A;    someFunction([]);&#x000A;} catch (ArgumentError error) {&#x000A;    writeln("ERROR: ", error.msg);&#x000A;    return 1;&#x000A;}&#x000A;</code></pre>
+          
+          <p>We need to add <code>string file = __FILE__, size_t line = __LINE__</code> which will automatically add position where exception was thrown, without it stacktrace will show line number of <code>super(msg)</code>.</p>
+          
+          <h3>More</h3>
+          
+          <p><code>nothrow</code> functions can not throw any exceptions. It&#39;s made to indicate for developers who will use your function, also for better compiled code generation.</p>
+          <pre class="highlight plaintext"><code>ulong size() nothrow { return m_size; }&#x000A;&#x000A;</code></pre>
+          
+          <p>Read more:</p>
+          
+          <ul>
+          <li><a href="http://ddili.org/ders/d.en/exceptions.html">http:&#47;&#47;ddili.org&#47;ders&#47;d.en&#47;exceptions.html</a></li>
+          <li><a href="http://dlang.org/library/core/exception.html">http:&#47;&#47;dlang.org&#47;library&#47;core&#47;exception.html</a></li>
+          </ul>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2015/01/13/anonymous-functions-in-d.html">Anonymous functions in D</a>
+            <br>
+            <span class='date'>Jan 13, 2015</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>We can use anonymous functions in <a href="http://dlang.org/">D</a>.</p>
+          
+          <h2><code>delegate</code>  keyword</h2>
+          
+          <p>Example with argument:</p>
+          <pre class="highlight plaintext"><code>import std.stdio;&#x000A;&#x000A;void evenNumbers(int[] numbers, void delegate(int) callback) {&#x000A;    foreach (int number; numbers) {&#x000A;        if (number % 2 == 0) callback(number);&#x000A;    }&#x000A;}&#x000A;&#x000A;void main() {&#x000A;    auto numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];&#x000A;    evenNumbers(numbers, (num) =&gt; writeln(num));&#x000A;    // or numbers.evenNumbers((num) =&gt; writeln(num));&#x000A;    // or numbers.evenNumbers((num) { writeln(num); });&#x000A;}&#x000A;</code></pre>
+          
+          <p>In this case <code>(num) =&gt; writeln(num)</code> is an argument, callable function.</p>
+          
+          <p>Output:</p>
+          <pre class="highlight plaintext"><code>% rdmd delegate.d&#x000A;2&#x000A;4&#x000A;6&#x000A;8&#x000A;10&#x000A;</code></pre>
+          
+          <p>Alternative syntax, ruby&#39;s blocks style:</p>
+          <pre class="highlight plaintext"><code>import std.stdio, std.string, std.file, std.path;&#x000A;&#x000A;void withingDir(string dir, void delegate() callback) {&#x000A;    auto cwd = absolutePath(".").chomp(".");&#x000A;    writeln("Current directory is: ", cwd);&#x000A;    chdir(dir);&#x000A;    callback();&#x000A;    chdir(cwd);&#x000A;}&#x000A;&#x000A;void main() {&#x000A;    withingDir("/var", {&#x000A;        writefln("I'm in %s", absolutePath(".").chomp("."));&#x000A;    });&#x000A;}&#x000A;</code></pre>
+          
+          <p>Output:</p>
+          <pre class="highlight plaintext"><code>% rdmd delegate.d&#x000A;Current directory is: /Users/pavel/d-try/&#x000A;I'm in /private/var/&#x000A;</code></pre>
+          
+          <p>If I want to have more rubish syntax I can make like this:</p>
+          <pre class="highlight plaintext"><code>alias void delegate() Block;&#x000A;&#x000A;void withingDir(string dir, Block callback) {&#x000A;    ...&#x000A;}&#x000A;&#x000A;</code></pre>
+          
+          <h2><code>function</code> keyword.</h2>
+          
+          <p>I don&#39;t know what is a difference between <code>delegate</code> and <code>function</code>, they doing same job.</p>
+          
+          <p>Example one:</p>
+          <pre class="highlight plaintext"><code>import std.stdio;&#x000A;&#x000A;void evenNumbers(int[] numbers, void function(int) callback) {&#x000A;    foreach (int number; numbers) {&#x000A;        if (number % 2 == 0) callback(number);&#x000A;    }&#x000A;}&#x000A;&#x000A;void main() {&#x000A;    auto numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];&#x000A;    numbers.evenNumbers(function (num) {&#x000A;        writeln(num);&#x000A;    });&#x000A;}&#x000A;</code></pre>
+          
+          <p>Example two:</p>
+          <pre class="highlight plaintext"><code>import std.stdio, std.string, std.file, std.path;&#x000A;&#x000A;void withingDir(string dir, void function() callback) {&#x000A;    auto cwd = absolutePath(".").chomp(".");&#x000A;    writeln("Current directory is: ", cwd);&#x000A;    chdir(dir);&#x000A;    callback();&#x000A;    chdir(cwd);&#x000A;}&#x000A;&#x000A;void main() {&#x000A;    withingDir("/var", function () {&#x000A;        writefln("I'm in %s", absolutePath(".").chomp("."));&#x000A;    });&#x000A;    // or withingDir("/var", { ... });&#x000A;}&#x000A;</code></pre>
+          
+          <p>Read more:</p>
+          
+          <ul>
+          <li><a href="http://ddili.org/ders/d.en/lambda.html">http:&#47;&#47;ddili.org&#47;ders&#47;d.en&#47;lambda.html</a></li>
+          </ul>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2014/10/28/itunes-12-blue-icon.html">iTunes 12 blue icon</a>
+            <br>
+            <span class='date'>Oct 28, 2014</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>I&#39;m not big fan of new icon for iTunes 12. Here is how to change it:</p>
+          
+          <p><img alt="Picture" src="https://coderwall-assets-0.s3.amazonaws.com/uploads/picture/file/3400/ituneses.png" /></p>
+          
+          <p>iTunes keep it&#39;s icon at </p>
+          <pre class="highlight shell"><code>/Applications/iTunes.app/Contents/Resources/iTunes.icns&#x000A;</code></pre>
+          
+          <p>For iTunes 11 you can download here: https:&#47;&#47;dl.dropboxusercontent.com&#47;u&#47;586048&#47;iTunes.icns</p>
+          
+          <p>I checked this <a href="http://www.visualpharm.com/articles/change_itunes_icon_on_macosx.html">manual</a> and app <a href="http://www.freemacsoft.net/liteicon/">liteicon</a> it worked for me. </p>
+          
+          <p>But it also works if you just replace icon.</p>
+          <pre class="highlight shell"><code><span class="c"># download file</span>&#x000A;wget https://dl.dropboxusercontent.com/u/586048/iTunes.icns -O /private/tmp/iTunes.icns&#x000A;<span class="nb">cd</span> /Applications/iTunes.app/Contents/Resources&#x000A;<span class="c"># replace icons</span>&#x000A;sudo mv iTunes.icns iTunes_red.icns&#x000A;sudo cp /private/tmp/iTunes.icns .&#x000A;<span class="c"># drop cache</span>&#x000A;sudo touch /Applications/iTunes.app&#x000A;sudo touch /Applications/iTunes.app/Contents/Info.plist&#x000A;sudo find /private/var/folders/ -name com.apple.dock.iconcache -exec rm <span class="o">{}</span> <span class="se">\;</span>&#x000A;<span class="c"># restart dock (may take few seconds)</span>&#x000A;killall Dock&#x000A;</code></pre>
+          
+          <p>I tested on os x 10.9.5, blue iTunes icon is from macmini having not updated iTunes</p>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2014/09/29/convert-ruby-time-to-server-timezone.html">Convert ruby time to server timezone</a>
+            <br>
+            <span class='date'>Sep 29, 2014</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>In web application have to handle about 4 different timezones: </p>
+          
+          <ul>
+          <li>application timezone</li>
+          <li>user timezone</li>
+          <li>server time timezone</li>
+          <li>database timezone</li>
+          </ul>
+          
+          <hr>
+          
+          <h4>Application timezone</h4>
+          
+          <p>Usually same with timezone of your business location, also usually a default timezone.</p>
+          <pre class="highlight ruby"><code><span class="no">Rails</span><span class="p">.</span><span class="nf">configuration</span><span class="p">.</span><span class="nf">time_zone</span> <span class="c1"># =&gt; "Jakarta"</span>&#x000A;<span class="c1"># or</span>&#x000A;<span class="no">MyApp</span><span class="o">::</span><span class="no">Application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">time_zone</span>&#x000A;</code></pre>
+          
+          <h4>User timezone</h4>
+          
+          <p>Timezone of current user, can be saved in user profile, or defected from javascript, eg http:&#47;&#47;pellepim.bitbucket.org&#47;jstz&#47;</p>
+          
+          <p>Usually set as: <code>Time.zone</code></p>
+          
+          <h4>Server timezone</h4>
+          
+          <p>It&#39;s a system time of current server, mostly UTC but sometimes can be a time of datacenter location. In development it&#39;s developer&#39;s machine timezone. You may need it if you want to make a cron task. Cron works in server&#39;s timezone.</p>
+          
+          <p>To calculate it I have handy function what I use with <a href="https://github.com/javan/whenever">gem whenever</a>:</p>
+          <pre class="highlight ruby"><code><span class="c1"># Your business timezone </span>&#x000A;<span class="no">Time</span><span class="p">.</span><span class="nf">zone</span> <span class="o">=</span> <span class="s2">"Asia/Jakarta"</span>&#x000A;&#x000A;<span class="k">def</span> <span class="nf">to_server_time</span><span class="p">(</span><span class="n">time_str</span><span class="p">)</span>&#x000A;  <span class="n">time</span> <span class="o">=</span> <span class="no">Time</span><span class="p">.</span><span class="nf">zone</span><span class="p">.</span><span class="nf">parse</span><span class="p">(</span><span class="n">time_str</span><span class="p">)</span>&#x000A;  <span class="n">server_offset</span> <span class="o">=</span> <span class="no">Time</span><span class="p">.</span><span class="nf">now</span><span class="p">.</span><span class="nf">getlocal</span><span class="p">.</span><span class="nf">utc_offset</span><span class="p">.</span><span class="nf">to_f</span> <span class="sr">/ 1.hour&#x000A;  time.in_time_zone(server_offset)&#x000A;end&#x000A;&#x000A;to_server_time('00:30') # =&gt; Sun, 28 Sep 2014 17:30:00 WET +00:00&#x000A;to_server_time('00:30').strftime("%H:%M") # =&gt; "17:30"&#x000A;&#x000A;</span></code></pre>
+          
+          <h4>Database timezone</h4>
+          
+          <p>Mysql don&#39;t store timezone in <code>datetime</code> format, but Postgresql does. Anyway it better if all dates in database have same timezone. Usually it&#39;s UTC, or can be custom:</p>
+          <pre class="highlight ruby"><code><span class="no">Rails</span><span class="p">.</span><span class="nf">configuration</span><span class="p">.</span><span class="nf">active_record</span><span class="p">.</span><span class="nf">default_timezone</span>&#x000A;<span class="c1"># or</span>&#x000A;<span class="n">config</span><span class="p">.</span><span class="nf">active_record</span><span class="p">.</span><span class="nf">default_timezone</span>&#x000A;</code></pre>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2014/08/26/node-js-standart-libs-auto-require.html">Node.js standart libs auto-require</a>
+            <br>
+            <span class='date'>Aug 26, 2014</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>I like node.js because it&#39;s very fast. But I also like to make a global objects in my application. I think nothing wrong with it. For example I have <code>global.App</code> object to keep object-wide things.</p>
+          
+          <p>It was really annoying for me to write <code>require(&#39;fs&#39;)</code> or <code>require(&#39;util&#39;)</code> in every file, I also think it&#39;s not as fast as access global object.</p>
+          
+          <p>So I come up with this solution:</p>
+          <pre class="highlight javascript"><code><span class="kd">var</span> <span class="nx">node</span> <span class="o">=</span> <span class="p">{};</span>&#x000A;&#x000A;<span class="kd">var</span> <span class="nx">modules</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'child_process'</span><span class="p">,</span> <span class="s1">'fs'</span><span class="p">,</span> <span class="s1">'http'</span><span class="p">,</span> <span class="s1">'https'</span><span class="p">,</span> <span class="s1">'cluster'</span><span class="p">,</span>&#x000A;  <span class="s1">'crypto'</span><span class="p">,</span> <span class="s1">'dns'</span><span class="p">,</span> <span class="s1">'domain'</span><span class="p">,</span> <span class="s1">'net'</span><span class="p">,</span> <span class="s1">'url'</span><span class="p">,</span> <span class="s1">'util'</span><span class="p">,</span> <span class="s1">'vm'</span><span class="p">,</span> <span class="s1">'path'</span>&#x000A;<span class="p">];</span>&#x000A;&#x000A;<span class="kd">var</span> <span class="nx">loadedModules</span> <span class="o">=</span> <span class="p">{};</span>&#x000A;&#x000A;<span class="nx">modules</span><span class="p">.</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">)</span> <span class="p">{</span>&#x000A;  <span class="nb">Object</span><span class="p">.</span><span class="nx">defineProperty</span><span class="p">(</span><span class="nx">node</span><span class="p">,</span> <span class="nx">moduleName</span><span class="p">,</span> <span class="p">{</span>&#x000A;    <span class="na">get</span><span class="p">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>&#x000A;      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">loadedModules</span><span class="p">[</span><span class="nx">moduleName</span><span class="p">])</span> <span class="p">{</span>&#x000A;        <span class="nx">loadedModules</span><span class="p">[</span><span class="nx">moduleName</span><span class="p">]</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">);</span>&#x000A;      <span class="p">}</span>&#x000A;      <span class="k">return</span> <span class="nx">loadedModules</span><span class="p">[</span><span class="nx">moduleName</span><span class="p">];</span>&#x000A;    <span class="p">}</span>&#x000A;  <span class="p">});</span>&#x000A;<span class="p">});</span>&#x000A;&#x000A;<span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="nx">node</span><span class="p">;</span>&#x000A;<span class="nx">global</span><span class="p">.</span><span class="nx">node</span> <span class="o">=</span> <span class="nx">node</span><span class="p">;</span>&#x000A;</code></pre>
+          
+          <p>It make lazy-loading for all standart libraries as getters of global object <code>node</code>
+          Later in my code:</p>
+          <pre class="highlight javascript"><code><span class="nx">node</span><span class="p">.</span><span class="nx">fs</span><span class="p">.</span><span class="nx">readFile</span><span class="p">();</span>&#x000A;<span class="nx">node</span><span class="p">.</span><span class="nx">util</span><span class="p">.</span><span class="nx">_extend</span><span class="p">({},</span> <span class="nx">params</span><span class="p">);</span>&#x000A;<span class="nx">node</span><span class="p">.</span><span class="nx">url</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">node</span><span class="p">.</span><span class="nx">url</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">endpoint</span><span class="p">,</span> <span class="nx">filepath</span><span class="p">));</span>&#x000A;<span class="nx">node</span><span class="p">.</span><span class="nx">url</span><span class="p">.</span><span class="nx">format</span><span class="p">(</span><span class="nx">urlObj</span><span class="p">);</span>&#x000A;</code></pre>
+        </article>
+        <article class='blog-post'>
+          <h2 class='title'>
+            <a href="/2014/07/16/continuous-testing-for-d.html">Continuous testing for D</a>
+            <br>
+            <span class='date'>Jul 16, 2014</span>
+          </h2>
+          <!--
+            use article.summary(250) if you have Nokogiri available to show just
+            the first 250 characters
+          -->
+          <p>I&#39;m not sure if Travis CI can install packages, but with <a href="http://drone.io">drone.io</a> it&#39;s possible</p>
+          
+          <p>Here is how I make it:</p>
+          
+          <ul>
+          <li>Add project</li>
+          <li>Choose C&#47;C++ as language</li>
+          <li>Add build command which will install D compiler and run tests.</li>
+          </ul>
+          
+          <p>Command:</p>
+          <pre class="highlight shell"><code><span class="c"># prepare apt repository</span>&#x000A;sudo wget http://netcologne.dl.sourceforge.net/project/d-apt/files/d-apt.list -O /etc/apt/sources.list.d/d-apt.list&#x000A;sudo apt-get update <span class="o">&amp;&amp;</span> sudo apt-get -y --allow-unauthenticated install --reinstall d-apt-keyring <span class="o">&amp;&amp;</span> sudo apt-get update&#x000A;<span class="c"># install dmd and dub</span>&#x000A;sudo apt-get install dmd-bin dub&#x000A;<span class="c"># build and run tests</span>&#x000A;dub <span class="nb">test</span>&#x000A;</code></pre>
+        </article>
+        <p><a href="/page/2/">Next page</a></p>
+      </div>
+      <aside>
+        <h2>Recent Articles</h2>
+        <ol>
+          <li>
+            <a href="/2015/04/17/testing-high-concurrency-http-server.html">Testing high concurrency http server</a>
+            <br>
+            <span class='date'>Apr 17, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/03/02/synchronous-javascript-with-fibers.html">Synchronous Javascript with fibers</a>
+            <br>
+            <span class='date'>Mar  2, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/29/convert-mysql-database-to-postgresql.html">Convert mysql database to postgresql</a>
+            <br>
+            <span class='date'>Jan 29, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/27/validating-hash-params-in-ruby.html">Validating hash params in ruby</a>
+            <br>
+            <span class='date'>Jan 27, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/14/handle-exceptions-in-d.html">Handle exceptions in D</a>
+            <br>
+            <span class='date'>Jan 14, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/13/anonymous-functions-in-d.html">Anonymous functions in D</a>
+            <br>
+            <span class='date'>Jan 13, 2015</span>
+          </li>
+          <li>
+            <a href="/2014/10/28/itunes-12-blue-icon.html">iTunes 12 blue icon</a>
+            <br>
+            <span class='date'>Oct 28, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/09/29/convert-ruby-time-to-server-timezone.html">Convert ruby time to server timezone</a>
+            <br>
+            <span class='date'>Sep 29, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/08/26/node-js-standart-libs-auto-require.html">Node.js standart libs auto-require</a>
+            <br>
+            <span class='date'>Aug 26, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/07/16/continuous-testing-for-d.html">Continuous testing for D</a>
+            <br>
+            <span class='date'>Jul 16, 2014</span>
+          </li>
+        </ol>
+      </aside>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta content='IE=edge;chrome=1' http-equiv='X-UA-Compatible'>
+    <meta content='width=device-width, initial-scale=1, user-scalable=yes' name='viewport'>
+    <meta content='#9CE8AC' name='theme-color'>
+    <title>
+      PE-Notes  - Synchronous Javascript with fibers
+    </title>
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="/feed.xml" />
+    <link href="/stylesheets/application-24cc418f.css" rel="stylesheet" type="text/css" />
+    <link href="/stylesheets/mobile-b135630e.css" rel="stylesheet" type="text/css" media="only screen and (max-device-width : 640px), screen and (max-width : 640px)" />
+  </head>
+  <body>
+    <header>
+      <div class='inner'><a href='/'><h2>Pavel's Notes</h2>
+        <br>
+        <h4>About programming in Ruby, Javascript, D</h4></a></div>
+    </header>
+    <div class='page-wrapper'>
+      <div id='main' role='main'>
+        <article class='blog-post'>
+          <h2 class='title'>
+            Synchronous Javascript with fibers
+            <br>
+            <span class='date'>Mar  2, 2015</span>
+          </h2>
+          <p>I was suprised how nice to get rid of endless nested callbacks in javascript.</p>
+          
+          <p>I was playing with <a href="https://github.com/laverdet/node-fibers">node-fibers</a>, trying to make it easier to write tests.. One day I came up with idea: what if one function can run asynchronously when we call inside fiber and synchronous when passing a callback function. Here&#39;s how I can make it:</p>
+          <pre class="highlight javascript"><code>&#x000A;<span class="kd">var</span> <span class="nx">Fiber</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">'fibers'</span><span class="p">);</span>&#x000A;&#x000A;<span class="c1">// can be called to convert multiple methods</span>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSync</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">receiver</span><span class="p">)</span> <span class="p">{</span>&#x000A;  <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">n</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="nx">n</span> <span class="o">&lt;</span> <span class="nx">arguments</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">n</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>&#x000A;    <span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">receiver</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">[</span><span class="nx">n</span><span class="p">]);</span>&#x000A;  <span class="p">}</span>&#x000A;<span class="p">};</span>&#x000A;&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">receiver</span><span class="p">,</span> <span class="nx">methodName</span><span class="p">,</span> <span class="nx">errorArgNum</span><span class="p">)</span> <span class="p">{</span>&#x000A;  <span class="kd">var</span> <span class="nx">origFn</span> <span class="o">=</span> <span class="nx">receiver</span><span class="p">[</span><span class="nx">methodName</span><span class="p">];</span>&#x000A;&#x000A;  <span class="k">if</span> <span class="p">(</span><span class="nx">origFn</span> <span class="o">==</span> <span class="kc">undefined</span><span class="p">)</span> <span class="p">{</span>&#x000A;    <span class="k">throw</span> <span class="s2">"Object don't have property '"</span> <span class="o">+</span> <span class="nx">methodName</span> <span class="o">+</span> <span class="s2">"'"</span><span class="p">;</span>&#x000A;  <span class="p">}</span>&#x000A;&#x000A;  <span class="nx">receiver</span><span class="p">[</span><span class="nx">methodName</span><span class="p">]</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>&#x000A;    <span class="kd">var</span> <span class="nx">lastArg</span> <span class="o">=</span> <span class="nx">arguments</span><span class="p">[</span><span class="nx">arguments</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">];</span>&#x000A;&#x000A;    <span class="c1">// check if it called inside Fiber</span>&#x000A;    <span class="k">if</span> <span class="p">(</span><span class="nx">Fiber</span><span class="p">.</span><span class="nx">current</span> <span class="o">&amp;&amp;</span> <span class="k">typeof</span> <span class="nx">lastArg</span> <span class="o">!=</span> <span class="s1">'function'</span><span class="p">)</span> <span class="p">{</span>&#x000A;      <span class="kd">var</span> <span class="nx">fiber</span> <span class="o">=</span> <span class="nx">Fiber</span><span class="p">.</span><span class="nx">current</span><span class="p">;</span>&#x000A;      <span class="kd">var</span> <span class="nx">newValue</span><span class="p">;</span>&#x000A;      <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="nb">Array</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">slice</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">arguments</span><span class="p">);</span>&#x000A;      <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">errorArgNum</span> <span class="o">==</span> <span class="s1">'undefined'</span><span class="p">)</span> <span class="nx">errorArgNum</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>&#x000A;      <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="p">{</span>&#x000A;        <span class="c1">// retrieve error from arguments (optional)</span>&#x000A;        <span class="kd">var</span> <span class="nx">error</span> <span class="o">=</span> <span class="nx">arguments</span><span class="p">[</span><span class="nx">errorArgNum</span><span class="p">];</span>&#x000A;        <span class="k">if</span> <span class="p">(</span><span class="nx">error</span><span class="p">)</span> <span class="p">{</span>&#x000A;          <span class="k">throw</span> <span class="nx">error</span><span class="p">;</span>&#x000A;        <span class="p">}</span>&#x000A;        <span class="c1">// assign result and resume fiber</span>&#x000A;        <span class="nx">newValue</span> <span class="o">=</span> <span class="nx">errorArgNum</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">?</span> <span class="nx">arguments</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="p">:</span> <span class="nx">data</span><span class="p">;</span>&#x000A;        <span class="nx">fiber</span><span class="p">.</span><span class="nx">run</span><span class="p">();</span>&#x000A;      <span class="p">});</span>&#x000A;&#x000A;      <span class="c1">// call original function with fiber-aware callback</span>&#x000A;      <span class="nx">origFn</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">args</span><span class="p">);</span>&#x000A;      <span class="c1">// pause and wait till resume</span>&#x000A;      <span class="nx">Fiber</span><span class="p">.</span><span class="nx">yield</span><span class="p">();</span>&#x000A;      <span class="k">return</span> <span class="nx">newValue</span><span class="p">;</span>&#x000A;    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>&#x000A;      <span class="nx">origFn</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">);</span>&#x000A;    <span class="p">}</span>&#x000A;  <span class="p">};</span>&#x000A;<span class="p">};</span>&#x000A;&#x000A;<span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="nx">Fiber</span><span class="p">;</span>&#x000A;</code></pre>
+          
+          <p>Fibers provide just one simple thing: stop execution and waiting for resume. For every function with callback we can call it, put fiber on pause then when we get callback - unpause and continue execution. Code become not blocking but asynchronous.</p>
+          
+          <p>Here&#39;s how you can use it:</p>
+          <pre class="highlight javascript"><code>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redisClient</span><span class="p">,</span> <span class="s1">'get'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span> <span class="c1">// 0 is number if error argument passed in callback</span>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redisClient</span><span class="p">,</span> <span class="s1">'set'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>&#x000A;&#x000A;<span class="nx">Fiber</span><span class="p">(</span><span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>&#x000A;  <span class="kd">var</span> <span class="nx">value</span> <span class="o">=</span> <span class="nx">redisClient</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">'some_key'</span><span class="p">);</span>&#x000A;  <span class="nx">redisClient</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s1">'some_key'</span><span class="p">,</span> <span class="nx">value</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>&#x000A;<span class="p">}).</span><span class="nx">run</span><span class="p">();</span>&#x000A;&#x000A;</code></pre>
+          
+          <p>When we call <code>Fiber.makeSyncFn</code> it will override original function. If <code>Fiber.current</code> present and if last argument is not a function then it will run it in fiber-aware wrapper, otherwise it will run in usual way.</p>
+          
+          <p>You can also patch prototype in same way:</p>
+          <pre class="highlight javascript"><code><span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redis</span><span class="p">.</span><span class="nx">RedisClient</span><span class="p">.</span><span class="nx">prototype</span><span class="p">,</span> <span class="s1">'set'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>&#x000A;<span class="nx">Fiber</span><span class="p">.</span><span class="nx">makeSyncFn</span><span class="p">(</span><span class="nx">redis</span><span class="p">.</span><span class="nx">RedisClient</span><span class="p">.</span><span class="nx">prototype</span><span class="p">,</span> <span class="s1">'get'</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>&#x000A;</code></pre>
+          
+          <p>I made some benchmarks: simple http server, it reads key from redis, increase by 1 and write to redis, I&#39;m creating new fiber for every request. Then I compare it with same http server written in asynchronous way.</p>
+          
+          <p>running 5000 times and see:</p>
+          
+          <table><thead>
+          <tr>
+          <th>name</th>
+          <th>time per request</th>
+          </tr>
+          </thead><tbody>
+          <tr>
+          <td>w&#47;fibers</td>
+          <td>0.751ms</td>
+          </tr>
+          <tr>
+          <td>async</td>
+          <td>0.706ms</td>
+          </tr>
+          </tbody></table>
+          
+          <p>I ran it many times, difference is about 0.1ms - 0.02ms</p>
+          
+          <p>Other benchmark is a counter, made to eliminate open-close fiber timing: compare with classic-callback code, overhead is about 0.01ms - 0.007ms, that time spent to pause and unpause a fiber.</p>
+          
+          <p>For me I feel pretty glad to make code more readable and maintainable, even I need to trade some microseconds (or milliseconds).</p>
+          
+          <p>* As a bonus it gives us a way to track exceptions with try-catch</p>
+          
+          <p>When you should NOT use fibers:</p>
+          
+          <ul>
+          <li>When you want to run some asynchronous things in parallel, for example query db and make http request</li>
+          <li>When you want your code run in browser as well</li>
+          <li>When your callback function receive more then one argument and you need them</li>
+          </ul>
+          
+          <p>Continue reading: an article about <a href="http://howtonode.org/generators-vs-fibers">Generators vs Fibers</a></p>
+          <div id="disqus_thread"></div>
+          <script type="text/javascript">
+          //<![CDATA[
+                            var disqus_shortname = 'pe-notes';
+                    
+              (function() {
+                  var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+                  dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+                  (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+              })();
+          //]]>
+          </script>
+          <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+          <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+          
+        </article>
+      </div>
+      <aside>
+        <h2>Recent Articles</h2>
+        <ol>
+          <li>
+            <a href="/2015/04/17/testing-high-concurrency-http-server.html">Testing high concurrency http server</a>
+            <br>
+            <span class='date'>Apr 17, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/03/02/synchronous-javascript-with-fibers.html">Synchronous Javascript with fibers</a>
+            <br>
+            <span class='date'>Mar  2, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/29/convert-mysql-database-to-postgresql.html">Convert mysql database to postgresql</a>
+            <br>
+            <span class='date'>Jan 29, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/27/validating-hash-params-in-ruby.html">Validating hash params in ruby</a>
+            <br>
+            <span class='date'>Jan 27, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/14/handle-exceptions-in-d.html">Handle exceptions in D</a>
+            <br>
+            <span class='date'>Jan 14, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/13/anonymous-functions-in-d.html">Anonymous functions in D</a>
+            <br>
+            <span class='date'>Jan 13, 2015</span>
+          </li>
+          <li>
+            <a href="/2014/10/28/itunes-12-blue-icon.html">iTunes 12 blue icon</a>
+            <br>
+            <span class='date'>Oct 28, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/09/29/convert-ruby-time-to-server-timezone.html">Convert ruby time to server timezone</a>
+            <br>
+            <span class='date'>Sep 29, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/08/26/node-js-standart-libs-auto-require.html">Node.js standart libs auto-require</a>
+            <br>
+            <span class='date'>Aug 26, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/07/16/continuous-testing-for-d.html">Continuous testing for D</a>
+            <br>
+            <span class='date'>Jul 16, 2014</span>
+          </li>
+        </ol>
+      </aside>
+    </div>
+  </body>
+</html>

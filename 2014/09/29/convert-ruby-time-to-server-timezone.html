@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta content='IE=edge;chrome=1' http-equiv='X-UA-Compatible'>
+    <meta content='width=device-width, initial-scale=1, user-scalable=yes' name='viewport'>
+    <meta content='#9CE8AC' name='theme-color'>
+    <title>
+      PE-Notes  - Convert ruby time to server timezone
+    </title>
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="/feed.xml" />
+    <link href="/stylesheets/application-24cc418f.css" rel="stylesheet" type="text/css" />
+    <link href="/stylesheets/mobile-b135630e.css" rel="stylesheet" type="text/css" media="only screen and (max-device-width : 640px), screen and (max-width : 640px)" />
+  </head>
+  <body>
+    <header>
+      <div class='inner'><a href='/'><h2>Pavel's Notes</h2>
+        <br>
+        <h4>About programming in Ruby, Javascript, D</h4></a></div>
+    </header>
+    <div class='page-wrapper'>
+      <div id='main' role='main'>
+        <article class='blog-post'>
+          <h2 class='title'>
+            Convert ruby time to server timezone
+            <br>
+            <span class='date'>Sep 29, 2014</span>
+          </h2>
+          <p>In web application have to handle about 4 different timezones: </p>
+          
+          <ul>
+          <li>application timezone</li>
+          <li>user timezone</li>
+          <li>server time timezone</li>
+          <li>database timezone</li>
+          </ul>
+          
+          <hr>
+          
+          <h4>Application timezone</h4>
+          
+          <p>Usually same with timezone of your business location, also usually a default timezone.</p>
+          <pre class="highlight ruby"><code><span class="no">Rails</span><span class="p">.</span><span class="nf">configuration</span><span class="p">.</span><span class="nf">time_zone</span> <span class="c1"># =&gt; "Jakarta"</span>&#x000A;<span class="c1"># or</span>&#x000A;<span class="no">MyApp</span><span class="o">::</span><span class="no">Application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">time_zone</span>&#x000A;</code></pre>
+          
+          <h4>User timezone</h4>
+          
+          <p>Timezone of current user, can be saved in user profile, or defected from javascript, eg http:&#47;&#47;pellepim.bitbucket.org&#47;jstz&#47;</p>
+          
+          <p>Usually set as: <code>Time.zone</code></p>
+          
+          <h4>Server timezone</h4>
+          
+          <p>It&#39;s a system time of current server, mostly UTC but sometimes can be a time of datacenter location. In development it&#39;s developer&#39;s machine timezone. You may need it if you want to make a cron task. Cron works in server&#39;s timezone.</p>
+          
+          <p>To calculate it I have handy function what I use with <a href="https://github.com/javan/whenever">gem whenever</a>:</p>
+          <pre class="highlight ruby"><code><span class="c1"># Your business timezone </span>&#x000A;<span class="no">Time</span><span class="p">.</span><span class="nf">zone</span> <span class="o">=</span> <span class="s2">"Asia/Jakarta"</span>&#x000A;&#x000A;<span class="k">def</span> <span class="nf">to_server_time</span><span class="p">(</span><span class="n">time_str</span><span class="p">)</span>&#x000A;  <span class="n">time</span> <span class="o">=</span> <span class="no">Time</span><span class="p">.</span><span class="nf">zone</span><span class="p">.</span><span class="nf">parse</span><span class="p">(</span><span class="n">time_str</span><span class="p">)</span>&#x000A;  <span class="n">server_offset</span> <span class="o">=</span> <span class="no">Time</span><span class="p">.</span><span class="nf">now</span><span class="p">.</span><span class="nf">getlocal</span><span class="p">.</span><span class="nf">utc_offset</span><span class="p">.</span><span class="nf">to_f</span> <span class="sr">/ 1.hour&#x000A;  time.in_time_zone(server_offset)&#x000A;end&#x000A;&#x000A;to_server_time('00:30') # =&gt; Sun, 28 Sep 2014 17:30:00 WET +00:00&#x000A;to_server_time('00:30').strftime("%H:%M") # =&gt; "17:30"&#x000A;&#x000A;</span></code></pre>
+          
+          <h4>Database timezone</h4>
+          
+          <p>Mysql don&#39;t store timezone in <code>datetime</code> format, but Postgresql does. Anyway it better if all dates in database have same timezone. Usually it&#39;s UTC, or can be custom:</p>
+          <pre class="highlight ruby"><code><span class="no">Rails</span><span class="p">.</span><span class="nf">configuration</span><span class="p">.</span><span class="nf">active_record</span><span class="p">.</span><span class="nf">default_timezone</span>&#x000A;<span class="c1"># or</span>&#x000A;<span class="n">config</span><span class="p">.</span><span class="nf">active_record</span><span class="p">.</span><span class="nf">default_timezone</span>&#x000A;</code></pre>
+          <div id="disqus_thread"></div>
+          <script type="text/javascript">
+          //<![CDATA[
+                            var disqus_shortname = 'pe-notes';
+                    
+              (function() {
+                  var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+                  dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+                  (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+              })();
+          //]]>
+          </script>
+          <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+          <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+          
+        </article>
+      </div>
+      <aside>
+        <h2>Recent Articles</h2>
+        <ol>
+          <li>
+            <a href="/2015/04/17/testing-high-concurrency-http-server.html">Testing high concurrency http server</a>
+            <br>
+            <span class='date'>Apr 17, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/03/02/synchronous-javascript-with-fibers.html">Synchronous Javascript with fibers</a>
+            <br>
+            <span class='date'>Mar  2, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/29/convert-mysql-database-to-postgresql.html">Convert mysql database to postgresql</a>
+            <br>
+            <span class='date'>Jan 29, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/27/validating-hash-params-in-ruby.html">Validating hash params in ruby</a>
+            <br>
+            <span class='date'>Jan 27, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/14/handle-exceptions-in-d.html">Handle exceptions in D</a>
+            <br>
+            <span class='date'>Jan 14, 2015</span>
+          </li>
+          <li>
+            <a href="/2015/01/13/anonymous-functions-in-d.html">Anonymous functions in D</a>
+            <br>
+            <span class='date'>Jan 13, 2015</span>
+          </li>
+          <li>
+            <a href="/2014/10/28/itunes-12-blue-icon.html">iTunes 12 blue icon</a>
+            <br>
+            <span class='date'>Oct 28, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/09/29/convert-ruby-time-to-server-timezone.html">Convert ruby time to server timezone</a>
+            <br>
+            <span class='date'>Sep 29, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/08/26/node-js-standart-libs-auto-require.html">Node.js standart libs auto-require</a>
+            <br>
+            <span class='date'>Aug 26, 2014</span>
+          </li>
+          <li>
+            <a href="/2014/07/16/continuous-testing-for-d.html">Continuous testing for D</a>
+            <br>
+            <span class='date'>Jul 16, 2014</span>
+          </li>
+        </ol>
+      </aside>
+    </div>
+  </body>
+</html>
