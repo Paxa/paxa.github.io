@@ -60,6 +60,8 @@ Fiber.makeSyncFn = function(receiver, methodName, errorArgNum) {
 module.exports = Fiber;
 ```
 
+-READMORE-
+
 Fibers provide just one simple thing: stop execution and waiting for resume. For every function with callback we can call it, put fiber on pause then when we get callback - unpause and continue execution. Code become not blocking but asynchronous.
 
 Here's how you can use it:

@@ -18,6 +18,7 @@ try {
 
 `catch (Exception error)` will catch all exception of type `Exception` and child (inhereted) types.
 
+-READMORE-
 
 ### Error types structure
 

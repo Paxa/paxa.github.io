@@ -14,47 +14,54 @@ Currently I run it in virtual machine, with ubuntu.
 
 I used this documentation http://drone.readthedocs.org/en/latest/install.html
 
-    $ wget http://downloads.drone.io/latest/drone.deb
-    $ dpkg -i drone.deb
-    $ drone start
-    # docker is running on http://localhost:80
-    $ apt-get install docker.io
+```
+$ wget http://downloads.drone.io/latest/drone.deb
+$ dpkg -i drone.deb
+$ drone start
+# docker is running on http://localhost:80
+$ apt-get install docker.io
+```
 
 Then it took for me a while to understand how make it build my code, so I cloned it to server and run inside app folder:
 
-    drone build .
+```
+drone build .
+```
  
 To test .drone.yml without commit
 
 
 Drone reads `.drone.yml` as a scenario to run tests, here's what we use:
 
-    image: bradrydzewski/ruby:2.1.1
-    script:
-      - cp config/database.drone.yml config/database.yml
-      - mkdir -p /tmp/bundler
-      - sudo chown ubuntu:ubuntu /tmp/bundler
-      - bundle install --path=/tmp/bundler --deployment --quiet
-      - mysql -u root -h127.0.0.1 -P 3306 -e 'create database rails_app_test;'
-      - mysql -u root -h127.0.0.1 -P 3306 -D rails_app_test < ./db/structure.sql
-      - bundle exec rspec spec
-    services:
-      - mysql
-    cache:
-      - /tmp/bundler
-    notify:
-      email:
-        recipients:
-          - our.team.emails@example.com
-
+```
+image: bradrydzewski/ruby:2.1.1
+script:
+  - cp config/database.drone.yml config/database.yml
+  - mkdir -p /tmp/bundler
+  - sudo chown ubuntu:ubuntu /tmp/bundler
+  - bundle install --path=/tmp/bundler --deployment --quiet
+  - mysql -u root -h127.0.0.1 -P 3306 -e 'create database rails_app_test;'
+  - mysql -u root -h127.0.0.1 -P 3306 -D rails_app_test < ./db/structure.sql
+  - bundle exec rspec spec
+services:
+  - mysql
+cache:
+  - /tmp/bundler
+notify:
+  email:
+    recipients:
+      - our.team.emails@example.com
+```
 
 In our project use plain-sql `structure.sql` because some things not working well with `schema.rb`, and it easy to setup testing environment.
 
 Drone use own images for docker to build, most of them are at docker repository, but new versions may be not there.
 
-I cloned https://github.com/drone/images to server, and run:
+I cloned [https://github.com/drone/images](https://github.com/drone/images) to server, and run:
 
-    docker build -rm -t bradrydzewski/ruby:2.1.1  builder/ruby/ruby_2.1.1/
+```
+docker build -rm -t bradrydzewski/ruby:2.1.1  builder/ruby/ruby_2.1.1/
+```
 
 This will build image and add it to docker's local catalogue.
 

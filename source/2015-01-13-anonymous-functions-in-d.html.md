@@ -41,6 +41,8 @@ Output:
 10
 ```
 
+-READMORE-
+
 Alternative syntax, ruby's blocks style:
 
 ```d

@@ -42,4 +42,5 @@ At the end you will see statistics table:
 ------------------------------  ---------  ---------  ---------  --------------
              Total import time       4752       4752          0         22.260s
 ```
+
 Done!

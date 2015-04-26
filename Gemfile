@@ -19,4 +19,5 @@ gem 'bourbon'
 gem 'neat'
 
 gem 'redcarpet'
-#gem 'kaminari'
+gem 'nokogiri'
+gem 'looksee'

@@ -39,8 +39,11 @@ ab -n 500 -c 500 http://127.0.0.1:7080/
 ```
 Probably we hit system limitation on max open files per process.
 
+-READMORE-
+
 After hours I fine this manual most useful
-http://b.oldhu.com/2012/07/19/increase-tcp-max-connections-on-mac-os-x/
+
+[http://b.oldhu.com/2012/07/19/increase-tcp-max-connections-on-mac-os-x/](http://b.oldhu.com/2012/07/19/increase-tcp-max-connections-on-mac-os-x/)
 
 
 I also increase `worker_processes` and `worker_connections`in nginx:
@@ -82,10 +85,11 @@ So I could make 3000 parallel requests and get a response in 3.183 sec. But some
 * **httperf** - I could not manage to send as many request as I want
 * **siege** - was better but still could not make many requests
 
-What make me happy is a utility called **boom**
+What make me happy is a utility called [**boom**](https://github.com/rakyll/boom)
 
-Written in GO and source on github: 
-https://github.com/rakyll/boom
+Written in GO and source on github:
+
+[https://github.com/rakyll/boom](https://github.com/rakyll/boom)
 
 There is no binary for mac, so need to compile:
 
@@ -102,6 +106,7 @@ Using boom:
 ```
 
 It has:
+
 * nice progress bar
 * can handle many requests (eg 30k reqs with 1500 conns) 
 * can handle as much concurrency as I need
